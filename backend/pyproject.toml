@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "iseetv-backend"
+version = "0.1.0"
+description = "IPTV Backend"
+packages = [{include = "app"}]
+authors = ["Your Name <your.email@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+sqlalchemy = "^2.0.25"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

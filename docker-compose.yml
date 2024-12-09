@@ -1,9 +1,25 @@
 services:
   frontend:
-    container_name: iseetv
-    build: .
+    container_name: iseetv-frontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "1313:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+  backend:
+    container_name: iseetv-backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "1314:8000"
+    volumes:
+      - ./backend:/app
+      - db_data:/app/sql_app.db
+
+volumes:
+  db_data:
