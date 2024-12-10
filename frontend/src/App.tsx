@@ -26,6 +26,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [downloadProgress, setDownloadProgress] = useState<{ loaded: number; total: number }>();
+  const [refreshChannelList, setRefreshChannelList] = useState<(() => Promise<void>) | undefined>(undefined);
 
   const theme = React.useMemo(() => createTheme({
     palette: {
@@ -45,7 +46,7 @@ function App() {
 
   const handleToggleFavorite = async (channel: Channel) => {
     try {
-      await channelService.toggleFavorite(channel.id);
+      await channelService.toggleFavorite(channel.channel_number);
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
     }
@@ -94,7 +95,25 @@ function App() {
     try {
       setIsLoading(true);
       setError(undefined);
-      await channelService.refreshM3U(settings.m3uUrl);
+      setDownloadProgress(undefined);
+      
+      // First refresh the M3U
+      await channelService.refreshM3U(
+        settings.m3uUrl,
+        (loaded: number, total: number) => setDownloadProgress({ loaded, total })
+      );
+
+      // Wait a moment for the database to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Then refresh the channel list
+      if (typeof refreshChannelList === 'function') {
+        await refreshChannelList();
+      } else {
+        console.warn('Channel list refresh function not available');
+        // Don't throw an error, just log a warning
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('[App] Refresh error:', {
@@ -104,6 +123,7 @@ function App() {
       setError(`Failed to refresh M3U: ${errorMessage}`);
     } finally {
       setIsLoading(false);
+      setDownloadProgress(undefined);
     }
   };
 
@@ -148,6 +168,7 @@ function App() {
                 selectedChannel={selectedChannel}
                 onChannelSelect={handleChannelSelect}
                 onToggleFavorite={handleToggleFavorite}
+                onRefresh={setRefreshChannelList}
               />
             </Box>
           </Drawer>

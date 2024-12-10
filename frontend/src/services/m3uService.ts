@@ -68,7 +68,13 @@ export const m3uService = {
       console.log(`[M3U] Parsing ${lines.length} lines`);
       
       const channels: Channel[] = [];
-      let currentChannel: Partial<Channel> = {};
+      let currentChannel: Partial<Channel> = {
+        channel_number: 0,
+        guide_id: '',
+        name: '',
+        group: 'Default',
+        isFavorite: false
+      };
 
       lines.forEach((line, index) => {
         line = line.trim();
@@ -79,7 +85,8 @@ export const m3uService = {
           const attributes = info[0].match(/([a-zA-Z-]+)="([^"]*)"/g);
           
           currentChannel = {
-            id: `channel-${index}`,
+            channel_number: index + 1,
+            guide_id: `channel-${index}`,
             name: info[1].trim(),
             group: 'Default',
             isFavorite: false
@@ -98,7 +105,7 @@ export const m3uService = {
                 currentChannel.group = cleanValue;
                 break;
               case 'tvg-id':
-                currentChannel.id = cleanValue;
+                currentChannel.guide_id = cleanValue;
                 break;
               case 'tvg-name':
                 currentChannel.name = cleanValue || currentChannel.name;

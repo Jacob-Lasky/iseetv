@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 from ..models import Channel
 import re
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,19 @@ class M3UService:
             logger.error(f"Failed to download M3U: {str(e)}")
             raise
 
+    def _generate_channel_id(self, name: str, url: str) -> str:
+        """Generate a unique channel ID from name and URL"""
+        # Create a unique string combining name and URL
+        unique_string = f"{name}:{url}"
+        # Create an MD5 hash and take first 12 characters
+        return hashlib.md5(unique_string.encode()).hexdigest()[:12]
+
     def parse_m3u(self, content: str) -> List[Channel]:
         """Parse M3U content into channel objects"""
         lines = content.split("\n")
         channels = []
         current_channel = None
+        channel_number = 1  # Initialize counter
 
         for line in lines:
             line = line.strip()
@@ -39,27 +48,26 @@ class M3UService:
             if line.startswith("#EXTINF:"):
                 # Parse channel info
                 info = line[8:].split(",", 1)
-                attrs = self._parse_attributes(info[0])
-                name = (
-                    info[1].strip()
-                    if len(info) > 1
-                    else attrs.get("tvg-name", "Unknown")
-                )
+                if len(info) == 2:
+                    attrs = self._parse_attributes(info[0])
+                    name = info[1].strip()
+                    current_channel = {
+                        "channel_number": channel_number,  # Add channel number
+                        "guide_id": self._generate_channel_id(
+                            name, attrs.get("tvg-id", "")
+                        ),
+                        "name": name,
+                        "group": attrs.get("group-title", "Uncategorized"),
+                        "logo": attrs.get("tvg-logo"),
+                    }
+                    channel_number += 1  # Increment counter
 
-                current_channel = {
-                    "id": attrs.get("tvg-id", f"channel-{len(channels)}"),
-                    "name": name,
-                    "group": attrs.get("group-title", "Uncategorized"),
-                    "logo": attrs.get("tvg-logo"),
-                    "is_favorite": False,
-                }
+            elif line.startswith("http"):
+                if current_channel:
+                    current_channel["url"] = line
+                    channels.append(current_channel)
+                    current_channel = None
 
-            elif line.startswith("http") and current_channel:
-                current_channel["url"] = line
-                channels.append(current_channel)
-                current_channel = None
-
-        logger.info(f"Parsed {len(channels)} channels")
         return channels
 
     def _parse_attributes(self, attr_string: str) -> dict:

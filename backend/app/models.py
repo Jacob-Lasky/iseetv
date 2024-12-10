@@ -6,7 +6,8 @@ import datetime
 class Channel(Base):
     __tablename__ = "channels"
 
-    id = Column(String, primary_key=True)
+    channel_number = Column(Integer, primary_key=True)
+    guide_id = Column(String, index=True)
     name = Column(String, index=True)
     url = Column(String)
     group = Column(String, index=True)

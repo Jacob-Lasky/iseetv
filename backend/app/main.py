@@ -12,6 +12,7 @@ from .services.m3u_service import M3UService
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 import asyncio
+from sqlalchemy import func
 
 
 # Simpler logging setup
@@ -91,6 +92,7 @@ async def get_channels(
     try:
         query = db.query(models.Channel)
 
+        # Apply filters
         if group:
             query = query.filter(models.Channel.group == group)
         if search:
@@ -98,7 +100,13 @@ async def get_channels(
         if favorites_only:
             query = query.filter(models.Channel.is_favorite == True)
 
+        # Always order by channel number
+        query = query.order_by(models.Channel.channel_number)
+
+        # Get total count before pagination
         total = query.count()
+
+        # Apply pagination
         channels = query.offset(skip).limit(limit).all()
 
         logger.info(f"Returning {len(channels)} channels out of {total} total")
@@ -158,3 +166,27 @@ async def test_endpoint():
     except Exception as e:
         logger.error(f"Error in test endpoint: {str(e)}")
         raise
+
+
+@app.get("/channels/groups")
+async def get_channel_groups(db: Session = Depends(database.get_db)):
+    """Get all groups and their channel counts"""
+    try:
+        # Use SQLAlchemy to get groups and counts
+        groups = (
+            db.query(
+                models.Channel.group,
+                func.count(models.Channel.channel_number).label("count"),
+            )
+            .group_by(models.Channel.group)
+            .order_by(models.Channel.group)
+            .all()
+        )
+
+        return [
+            {"name": group or "Uncategorized", "count": count}
+            for group, count in groups
+        ]
+    except Exception as e:
+        logger.error(f"Error getting channel groups: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
