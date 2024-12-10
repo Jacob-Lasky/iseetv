@@ -1,4 +1,16 @@
 services:
+  init-db:
+    container_name: iseetv-init-db
+    image: python:3.11-slim
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    working_dir: /app
+    command: >
+      /bin/bash -c "
+        python init_db.py
+      "
+
   frontend:
     container_name: iseetv-frontend
     build: 
@@ -9,6 +21,10 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks:
+      - app-network
+    depends_on:
+      - backend
 
   backend:
     container_name: iseetv-backend
@@ -19,7 +35,17 @@ services:
       - "1314:8000"
     volumes:
       - ./backend:/app
-      - db_data:/app/sql_app.db
+      - ./data:/data
+    networks:
+      - app-network
+    user: "1000:1000"
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
 
 volumes:
-  db_data:
+  data:
+
+networks:
+  app-network:
+    driver: bridge
