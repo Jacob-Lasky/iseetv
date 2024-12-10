@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Paper } from '@mui/material';
 import Hls from 'hls.js';
 
+export {};
+
 interface VideoPlayerProps {
   url: string;
 }
@@ -19,16 +21,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url }) => {
       hls.loadSource(url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(e => console.log('Auto-play prevented:', e));
+        video.play()
+          .catch(e => console.warn('Autoplay prevented:', e));
       });
 
       return () => {
         hls.destroy();
+        video.pause();
       };
     }
     else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS support (Safari)
       video.src = url;
+      video.play()
+        .catch(e => console.warn('Autoplay prevented:', e));
+
+      return () => {
+        video.pause();
+      };
     }
   }, [url]);
 
@@ -40,6 +50,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url }) => {
           controls
           style={{ width: '100%', height: '100%' }}
           playsInline
+          autoPlay
         />
       </Box>
     </Paper>

@@ -7,7 +7,8 @@ const defaultSettings: Settings = {
   epgUrl: '',
   updateInterval: 24,
   updateOnStart: true,
-  theme: 'system'
+  theme: 'system',
+  showChannelNumbers: false,
 };
 
 export const settingsService = {

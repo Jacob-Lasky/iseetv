@@ -4,4 +4,5 @@ export interface Settings {
   updateInterval: number;
   updateOnStart: boolean;
   theme: 'light' | 'dark' | 'system';
+  showChannelNumbers: boolean;
 } 

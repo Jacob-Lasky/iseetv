@@ -16,6 +16,7 @@ import { m3uService } from './services/m3uService';
 import type { Settings } from './models/Settings';
 import type { Channel } from './models/Channel';
 import { LoadingOverlay } from './components/LoadingOverlay';
+import { NumbersIcon } from './components/NumbersIcon';
 
 const DRAWER_WIDTH = 300;
 
@@ -67,7 +68,7 @@ function App() {
         
         const newChannels = await m3uService.parseM3U(
           newSettings.m3uUrl,
-          (loaded, total) => setDownloadProgress({ loaded, total })
+          (loaded: number, total: number) => setDownloadProgress({ loaded, total })
         );
         
         await channelService.saveChannels(newChannels);
@@ -127,6 +128,15 @@ function App() {
     }
   };
 
+  const handleToggleChannelNumbers = () => {
+    const newSettings = {
+      ...settings,
+      showChannelNumbers: !settings.showChannelNumbers
+    };
+    setSettings(newSettings);
+    settingsService.saveSettings(newSettings);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -155,11 +165,27 @@ function App() {
                 justifyContent: 'space-between',
                 px: 1
               }}>
-                <Tooltip title="Refresh Channels">
-                  <IconButton onClick={handleRefreshM3U} size="small">
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Tooltip title="Settings">
+                    <IconButton onClick={() => setShowSettings(true)} size="small">
+                      <SettingsIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Refresh Channels">
+                    <IconButton onClick={handleRefreshM3U} size="small">
+                      <RefreshIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title={settings.showChannelNumbers ? "Hide Channel Numbers" : "Show Channel Numbers"}>
+                    <IconButton 
+                      onClick={handleToggleChannelNumbers}
+                      size="small"
+                      color={settings.showChannelNumbers ? "primary" : "default"}
+                    >
+                      <NumbersIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
                 <IconButton onClick={() => setDrawerOpen(false)}>
                   <ChevronLeftIcon />
                 </IconButton>
@@ -169,6 +195,8 @@ function App() {
                 onChannelSelect={handleChannelSelect}
                 onToggleFavorite={handleToggleFavorite}
                 onRefresh={setRefreshChannelList}
+                showChannelNumbers={settings.showChannelNumbers}
+                onToggleChannelNumbers={handleToggleChannelNumbers}
               />
             </Box>
           </Drawer>
@@ -192,9 +220,6 @@ function App() {
                   </IconButton>
                 )}
               </Box>
-              <IconButton onClick={() => setShowSettings(true)}>
-                <SettingsIcon />
-              </IconButton>
             </Box>
 
             {/* Video Player */}

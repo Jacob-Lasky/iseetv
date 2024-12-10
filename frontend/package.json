@@ -12,7 +12,8 @@
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^4.2.4",
-    "hls.js": "^1.5.0"
+    "hls.js": "^1.4.12",
+    "@types/hls.js": "^1.0.0"
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",

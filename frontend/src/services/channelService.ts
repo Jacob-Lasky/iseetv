@@ -2,11 +2,13 @@ import { Channel } from '../models/Channel';
 import { ChannelGroup, ProgressCallback } from '../types/api';
 import { API_URL } from '../config/api';
 
+export {};
+
 interface GetChannelsParams {
   search?: string;
   group?: string;
   favoritesOnly?: boolean;
-}
+} 
 
 interface GetChannelsResponse {
   items: Channel[];
@@ -61,7 +63,14 @@ export const channelService = {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const data = await response.json();
+    
+    // Transform snake_case to camelCase
+    return {
+      ...data,
+      isFavorite: data.is_favorite,
+      lastWatched: data.last_watched ? new Date(data.last_watched) : undefined
+    };
   },
 
   async refreshM3U(url: string, onProgress?: ProgressCallback): Promise<void> {

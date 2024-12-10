@@ -5,7 +5,6 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  ListItemSecondaryAction,
   Paper,
   Typography,
   Divider,
@@ -29,20 +28,80 @@ import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { ChannelGroup } from '../types/api';
 
+export {};
+
 interface ChannelListProps {
   selectedChannel?: Channel;
   onChannelSelect: (channel: Channel) => void;
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
+  showChannelNumbers?: boolean;
+  onToggleChannelNumbers?: () => void;
 }
 
 type TabValue = 'all' | 'favorites' | 'recent';
+
+interface ChannelListItemProps {
+  channel: Channel;
+  selected: boolean;
+  onSelect: (channel: Channel) => void;
+  onToggleFavorite: (channel: Channel) => void;
+  indented?: boolean;
+  showChannelNumbers?: boolean;
+}
+
+const ChannelListItem: React.FC<ChannelListItemProps> = ({
+  channel,
+  selected,
+  onSelect,
+  onToggleFavorite,
+  indented = false,
+  showChannelNumbers = false,
+}) => (
+  <ListItemButton
+    selected={selected}
+    onClick={() => onSelect(channel)}
+    sx={{ pl: indented ? 4 : 2 }}
+  >
+    <IconButton
+      size="small"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggleFavorite(channel);
+      }}
+      sx={{ mr: 1 }}
+    >
+      {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
+    </IconButton>
+    <ListItemIcon>
+      <Avatar
+        src={channel.logo}
+        alt={channel.name}
+        variant="square"
+        sx={{ width: 32, height: 32 }}
+      >
+        {channel.name[0]}
+      </Avatar>
+    </ListItemIcon>
+    <ListItemText
+      primary={channel.name}
+      secondary={showChannelNumbers ? channel.channel_number : undefined}
+    />
+  </ListItemButton>
+);
+
+interface TabState {
+  scrollPosition: number;
+  expandedGroups: Record<string, boolean>;
+}
 
 export const ChannelList: React.FC<ChannelListProps> = ({
   selectedChannel,
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
+  showChannelNumbers = false,
+  onToggleChannelNumbers,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>('all');
@@ -59,6 +118,23 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const listRef = useRef<HTMLDivElement>(null);
   const [groups, setGroups] = useState<ChannelGroup[]>([]);
+  const [groupChannels, setGroupChannels] = useState<Record<string, Channel[]>>({});
+
+  // Replace separate scroll positions and expandedGroups with combined tab state
+  const [tabStates, setTabStates] = useState<Record<TabValue, TabState>>({
+    all: {
+      scrollPosition: parseInt(localStorage.getItem('channelListScroll_all') || '0'),
+      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_all') || '{}'),
+    },
+    favorites: {
+      scrollPosition: parseInt(localStorage.getItem('channelListScroll_favorites') || '0'),
+      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_favorites') || '{}'),
+    },
+    recent: {
+      scrollPosition: parseInt(localStorage.getItem('channelListScroll_recent') || '0'),
+      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_recent') || '{}'),
+    },
+  });
 
   const loadChannels = useCallback(async (loadMore = false) => {
     try {
@@ -73,9 +149,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         }
       );
 
-      setChannels(prev => 
-        loadMore ? [...prev, ...response.items] : response.items
-      );
+      // Only replace channels if we're not in the 'all' tab or it's the first load
+      if (activeTab !== 'all' || !loadMore) {
+        setChannels(prev => 
+          loadMore ? [...prev, ...response.items] : response.items
+        );
+      }
       setHasMore(response.items.length === pageSize);
     } catch (error) {
       console.error('Failed to load channels:', error);
@@ -104,20 +183,75 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, []);
 
-  // Save scroll position when unmounting
+  // Combine the initialization effects into one and load channels for expanded groups
   useEffect(() => {
-    const listElement = listRef.current;
-    if (!listElement) return;
+    // Initialize expanded groups from the current tab's state
+    const savedExpandedGroups = tabStates[activeTab].expandedGroups;
+    
+    // Only set groups as expanded if we actually have their channels loaded
+    // OR if we're currently loading them (group is marked as expanded)
+    const validExpandedGroups = { ...savedExpandedGroups };
+    Object.keys(savedExpandedGroups).forEach(group => {
+      // Keep the group expanded if it's already expanded, even if channels aren't loaded yet
+      if (savedExpandedGroups[group] === true) {
+        validExpandedGroups[group] = true;
+      }
+    });
+    
+    setExpandedGroups(validExpandedGroups);
 
-    const savedScrollTop = localStorage.getItem('channelListScroll');
-    if (savedScrollTop) {
-      listElement.scrollTop = parseInt(savedScrollTop);
+    // Save the corrected state back to localStorage
+    localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify(validExpandedGroups));
+
+    // Load channels for any expanded groups
+    const loadExpandedGroups = async () => {
+      const expandedGroupNames = Object.entries(validExpandedGroups)
+        .filter(([_, isExpanded]) => isExpanded)
+        .map(([groupName]) => groupName);
+
+      if (expandedGroupNames.length > 0) {
+        setLoading(true);
+        try {
+          const promises = expandedGroupNames.map(group =>
+            channelService.getChannels(0, 1000, {
+              group,
+              search: searchTerm,
+              favoritesOnly: activeTab === 'favorites'
+            })
+          );
+
+          const responses = await Promise.all(promises);
+          const allChannels = responses.flatMap(response => response.items);
+          
+          // Update channels without clearing existing ones
+          setChannels(prev => {
+            const uniqueChannels = [...prev];
+            allChannels.forEach(channel => {
+              const exists = uniqueChannels.some(c => c.channel_number === channel.channel_number);
+              if (!exists) {
+                uniqueChannels.push(channel);
+              }
+            });
+            return uniqueChannels;
+          });
+        } catch (error) {
+          console.error('Failed to load channels for expanded groups:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Restore scroll position
+    const listElement = listRef.current;
+    if (listElement) {
+      requestAnimationFrame(() => {
+        listElement.scrollTop = tabStates[activeTab].scrollPosition;
+      });
     }
 
-    return () => {
-      localStorage.setItem('channelListScroll', listElement.scrollTop.toString());
-    };
-  }, []);
+    loadExpandedGroups();
+  }, [activeTab, tabStates, searchTerm, groupChannels]);
 
   // Save page number when it changes
   useEffect(() => {
@@ -131,8 +265,10 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       try {
         // Load groups first
         await loadGroups();
-        // Then load initial channels
-        await loadChannels(false);  // explicitly pass false for initial load
+        // Only load initial channels if we're not in the 'all' tab
+        if (activeTab !== 'all') {
+          await loadChannels(false);
+        }
       } catch (error) {
         console.error('Failed to initialize channel list:', error);
       } finally {
@@ -141,7 +277,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     };
 
     init();
-  }, [loadGroups, loadChannels]); // Add the dependencies
+  }, [loadGroups, loadChannels, activeTab]);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -175,16 +311,97 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     return filtered;
   }, [channels, searchTerm, activeTab]);
 
-  const groupedChannels = React.useMemo(() => {
-    return filteredChannels.reduce((acc, channel) => {
-      const group = channel.group || 'Uncategorized';
-      if (!acc[group]) {
-        acc[group] = [];
+  // Update handleToggleGroup to store channels by group
+  const handleToggleGroup = async (group: string) => {
+    // Store current scroll position
+    const currentScrollPosition = listRef.current?.scrollTop || 0;
+    
+    const isExpanding = !expandedGroups[group];
+    const newExpandedGroups = {
+      ...expandedGroups,
+      [group]: !expandedGroups[group]
+    };
+    setExpandedGroups(newExpandedGroups);
+
+    // Save expanded groups state for current tab
+    const newTabStates = {
+      ...tabStates,
+      [activeTab]: {
+        ...tabStates[activeTab],
+        expandedGroups: newExpandedGroups,
+        scrollPosition: currentScrollPosition  // Save current scroll position
       }
-      acc[group].push(channel);
-      return acc;
-    }, {} as Record<string, Channel[]>);
-  }, [filteredChannels]);
+    };
+    setTabStates(newTabStates);
+    localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify(newExpandedGroups));
+
+    // Load channels if needed
+    if (isExpanding && (!groupChannels[group] || groupChannels[group].length === 0)) {
+      setLoading(true);
+      try {
+        const response = await channelService.getChannels(0, 1000, {
+          group: group,
+          search: searchTerm,
+          favoritesOnly: activeTab === 'favorites'
+        });
+
+        setGroupChannels(prev => ({
+          ...prev,
+          [group]: response.items
+        }));
+
+        // Restore scroll position after content loads
+        requestAnimationFrame(() => {
+          if (listRef.current) {
+            listRef.current.scrollTop = currentScrollPosition;
+          }
+        });
+
+      } catch (error) {
+        console.error('Failed to load channels for group:', error);
+        // If loading fails, revert the expanded state
+        setExpandedGroups(prev => ({
+          ...prev,
+          [group]: false
+        }));
+        setTabStates(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            expandedGroups: {
+              ...prev[activeTab].expandedGroups,
+              [group]: false
+            }
+          }
+        }));
+        localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify({
+          ...newExpandedGroups,
+          [group]: false
+        }));
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Update the groupedChannels memo to use groupChannels
+  const groupedChannels = React.useMemo(() => {
+    const result: Record<string, Channel[]> = {};
+    Object.entries(groupChannels).forEach(([group, channels]) => {
+      result[group] = channels.filter(channel => {
+        if (searchTerm) {
+          const search = searchTerm.toLowerCase();
+          return (
+            channel.name.toLowerCase().includes(search) ||
+            channel.channel_number.toString().includes(search) ||
+            channel.group.toLowerCase().includes(search)
+          );
+        }
+        return true;
+      });
+    });
+    return result;
+  }, [groupChannels, searchTerm]);
 
   const handleChannelInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -196,11 +413,42 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   };
 
-  const handleToggleGroup = (group: string) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [group]: !prev[group]
-    }));
+  const handleToggleFavorite = async (channel: Channel) => {
+    try {
+      const updatedChannel = await channelService.toggleFavorite(channel.channel_number);
+      
+      // Update channel in main channels list
+      setChannels(prev => prev.map(ch => 
+        ch.channel_number === updatedChannel.channel_number 
+          ? { ...ch, isFavorite: updatedChannel.isFavorite }
+          : ch
+      ));
+
+      // Update channel in group channels
+      setGroupChannels(prev => {
+        const newGroupChannels = { ...prev };
+        Object.keys(newGroupChannels).forEach(group => {
+          newGroupChannels[group] = newGroupChannels[group].map(ch =>
+            ch.channel_number === updatedChannel.channel_number
+              ? { ...ch, isFavorite: updatedChannel.isFavorite }
+              : ch
+          );
+        });
+        return newGroupChannels;
+      });
+
+      // If we're in favorites tab and unfavoriting, remove the channel
+      if (activeTab === 'favorites' && !updatedChannel.isFavorite) {
+        setChannels(prev => prev.filter(ch => ch.channel_number !== updatedChannel.channel_number));
+      }
+
+      // If we're in favorites tab and favoriting, we might need to reload the list
+      if (activeTab === 'favorites' && updatedChannel.isFavorite) {
+        loadChannels(false);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
   };
 
   // Move refresh function definition before the useEffect
@@ -228,6 +476,44 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     };
   }, [onRefresh, refresh]);
 
+  // Update tab change handler to preserve channels
+  const handleTabChange = (_: any, newValue: TabValue) => {
+    if (listRef.current) {
+      // Save current scroll position
+      const currentScrollPosition = listRef.current.scrollTop;
+      
+      // Save to localStorage and state
+      localStorage.setItem(`channelListScroll_${activeTab}`, currentScrollPosition.toString());
+      setTabStates(prev => ({
+        ...prev,
+        [activeTab]: {
+          ...prev[activeTab],
+          scrollPosition: currentScrollPosition
+        }
+      }));
+
+      // Change tab
+      setActiveTab(newValue);
+
+      // Reset scroll position immediately to prevent jumps
+      listRef.current.scrollTop = 0;
+    }
+  };
+
+  // Separate effect for scroll position restoration
+  useEffect(() => {
+    const listElement = listRef.current;
+    if (!listElement) return;
+
+    // Use a small timeout to ensure the content is rendered
+    const timer = setTimeout(() => {
+      const savedPosition = tabStates[activeTab].scrollPosition;
+      listElement.scrollTop = savedPosition;
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [activeTab, tabStates]);
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1 }}>
@@ -245,19 +531,21 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             ),
           }}
         />
-        <TextField
-          size="small"
-          placeholder="Channel #"
-          value={channelInput}
-          onChange={(e) => setChannelInput(e.target.value)}
-          onKeyPress={handleChannelInput}
-          sx={{ mt: 1, width: '100px' }}
-        />
+        {showChannelNumbers && (
+          <TextField
+            size="small"
+            placeholder="Channel #"
+            value={channelInput}
+            onChange={(e) => setChannelInput(e.target.value)}
+            onKeyPress={handleChannelInput}
+            sx={{ mt: 1, width: '100px' }}
+          />
+        )}
       </Box>
 
       <Tabs
         value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
+        onChange={handleTabChange}  // Use the new handler
         variant="fullWidth"
       >
         <Tab label="All" value="all" />
@@ -275,57 +563,50 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           position: 'relative' 
         }}
       >
-        {groups.map(({ name: group, count }) => (
-          <Box key={group}>
-            <ListItemButton onClick={() => handleToggleGroup(group)}>
-              <ListItemText
-                primary={
-                  <Typography variant="subtitle1" color="primary" fontWeight="bold">
-                    {group} ({count})
-                  </Typography>
-                }
-              />
-              {expandedGroups[group] ? <ExpandLess /> : <ExpandMore />}
-            </ListItemButton>
-            <Collapse in={expandedGroups[group]} timeout="auto">
-              {expandedGroups[group] && groupedChannels[group]?.map((channel) => (
-                <ListItemButton
-                  key={channel.channel_number}
-                  selected={channel.channel_number === selectedChannel?.channel_number}
-                  onClick={() => onChannelSelect(channel)}
-                  sx={{ pl: 4 }}
-                >
-                  <ListItemIcon>
-                    <Avatar
-                      src={channel.logo}
-                      alt={channel.name}
-                      variant="square"
-                      sx={{ width: 32, height: 32 }}
-                    >
-                      {channel.name[0]}
-                    </Avatar>
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={channel.name}
-                    secondary={channel.channel_number}
+        {activeTab === 'all' ? (
+          // Show grouped channels for 'all' tab
+          groups.map(({ name: group, count }) => (
+            <Box key={group}>
+              <ListItemButton onClick={() => handleToggleGroup(group)} sx={{ pl: 2 }}>
+                <ListItemText
+                  primary={
+                    <Typography variant="subtitle1" color="primary" fontWeight="bold">
+                      {group} ({count})
+                    </Typography>
+                  }
+                />
+                {expandedGroups[group] ? <ExpandLess /> : <ExpandMore />}
+              </ListItemButton>
+              <Collapse in={expandedGroups[group]} timeout="auto">
+                {expandedGroups[group] && groupedChannels[group]?.map((channel) => (
+                  <ChannelListItem 
+                    key={channel.channel_number}
+                    channel={channel}
+                    selected={channel.channel_number === selectedChannel?.channel_number}
+                    onSelect={onChannelSelect}
+                    onToggleFavorite={handleToggleFavorite}
+                    showChannelNumbers={showChannelNumbers}
                   />
-                  <ListItemSecondaryAction>
-                    <IconButton
-                      edge="end"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(channel);
-                      }}
-                    >
-                      {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItemButton>
-              ))}
-            </Collapse>
-            <Divider />
-          </Box>
-        ))}
+                ))}
+              </Collapse>
+              <Divider />
+            </Box>
+          ))
+        ) : (
+          // Show flat list for favorites and recent tabs
+          filteredChannels.map((channel) => (
+            <React.Fragment key={channel.channel_number}>
+              <ChannelListItem 
+                channel={channel}
+                selected={channel.channel_number === selectedChannel?.channel_number}
+                onSelect={onChannelSelect}
+                onToggleFavorite={handleToggleFavorite}
+                showChannelNumbers={showChannelNumbers}
+              />
+              <Divider />
+            </React.Fragment>
+          ))
+        )}
         
         {loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>

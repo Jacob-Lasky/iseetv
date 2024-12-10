@@ -1,6 +1,8 @@
 import { Channel } from '../models/Channel';
 import { channelService } from './channelService';
 
+export {};
+
 interface ProgressCallback {
   (loaded: number, total: number): void;
 }

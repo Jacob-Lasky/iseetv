@@ -86,8 +86,7 @@ async def get_channels(
     db: Session = Depends(database.get_db),
 ):
     logger.info(
-        f"Fetching channels (skip={skip}, limit={limit}, group={group}, "
-        f"search={search}, favorites={favorites_only})"
+        f"Getting channels with skip={skip}, limit={limit}, group={group}, search={search}, favorites_only={favorites_only}"
     )
     try:
         query = db.query(models.Channel)
@@ -106,19 +105,28 @@ async def get_channels(
         # Get total count before pagination
         total = query.count()
 
-        # Apply pagination
-        channels = query.offset(skip).limit(limit).all()
+        # If group is specified, don't paginate
+        if group:
+            channels = query.all()
+        else:
+            channels = query.offset(skip).limit(limit).all()
 
-        logger.info(f"Returning {len(channels)} channels out of {total} total")
         return {"items": channels, "total": total, "skip": skip, "limit": limit}
     except Exception as e:
         logger.error(f"Error getting channels: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/channels/{channel_id}/favorite")
-async def toggle_favorite(channel_id: str, db: Session = Depends(database.get_db)):
-    channel = db.query(models.Channel).filter(models.Channel.id == channel_id).first()
+@app.put("/channels/{channel_number}/favorite")
+async def toggle_favorite(channel_number: int, db: Session = Depends(database.get_db)):
+    """Toggle favorite status for a channel"""
+    logger.info(f"Toggling favorite status for channel {channel_number}")
+    channel = (
+        db.query(models.Channel)
+        .filter(models.Channel.channel_number == channel_number)
+        .first()
+    )
+
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
@@ -171,6 +179,7 @@ async def test_endpoint():
 @app.get("/channels/groups")
 async def get_channel_groups(db: Session = Depends(database.get_db)):
     """Get all groups and their channel counts"""
+    logger.info("Getting channel groups")
     try:
         # Use SQLAlchemy to get groups and counts
         groups = (
