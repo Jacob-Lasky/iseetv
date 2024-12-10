@@ -27,6 +27,7 @@ import {
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { ChannelGroup } from '../types/api';
+import { recentChannelsService } from '../services/recentChannelsService';
 
 export {};
 
@@ -331,8 +332,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     if (activeTab === 'favorites') {
       filtered = filtered.filter(c => c.isFavorite);
     } else if (activeTab === 'recent') {
-      filtered = filtered.filter(c => c.lastWatched)
-        .sort((a, b) => (b.lastWatched?.getTime() || 0) - (a.lastWatched?.getTime() || 0));
+      filtered = recentChannelsService.getRecentChannels();
     }
 
     if (debouncedSearchTerm) {
@@ -429,39 +429,89 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   const handleToggleFavorite = async (channel: Channel) => {
     try {
-      const updatedChannel = await channelService.toggleFavorite(channel.channel_number);
+      // Optimistically update the UI
+      const newFavoriteStatus = !channel.isFavorite;
       
-      // Update channel in main channels list
+      // Update all channel states at once
+      const updateChannelInState = (ch: Channel) => 
+        ch.channel_number === channel.channel_number 
+          ? { ...ch, isFavorite: newFavoriteStatus }
+          : ch;
+
+      setChannels(prev => prev.map(updateChannelInState));
+      setGroupChannels(prev => {
+        const newState = { ...prev };
+        Object.keys(newState).forEach(group => {
+          if (newState[group]) {
+            newState[group] = newState[group].map(updateChannelInState);
+          }
+        });
+        return newState;
+      });
+
+      // Call the backend to toggle the favorite status
+      const updatedChannel = await channelService.toggleFavorite(channel.channel_number);
+
+      // Ensure the UI reflects the backend's response
       setChannels(prev => prev.map(ch => 
         ch.channel_number === updatedChannel.channel_number 
           ? { ...ch, isFavorite: updatedChannel.isFavorite }
           : ch
       ));
 
-      // Update channel in group channels
-      setGroupChannels(prev => {
-        const newGroupChannels = { ...prev };
-        Object.keys(newGroupChannels).forEach(group => {
-          newGroupChannels[group] = newGroupChannels[group].map(ch =>
-            ch.channel_number === updatedChannel.channel_number
-              ? { ...ch, isFavorite: updatedChannel.isFavorite }
-              : ch
-          );
+      // Update channel index
+      setChannelIndex(prev => {
+        const newNameIndex = new Map(prev.nameIndex);
+        newNameIndex.forEach((channels, word) => {
+          newNameIndex.set(word, channels.map(updateChannelInState));
         });
-        return newGroupChannels;
+        
+        const newNumberIndex = new Map(prev.numberIndex);
+        if (newNumberIndex.has(updatedChannel.channel_number)) {
+          newNumberIndex.set(updatedChannel.channel_number, {
+            ...newNumberIndex.get(updatedChannel.channel_number)!,
+            isFavorite: updatedChannel.isFavorite
+          });
+        }
+        
+        return {
+          nameIndex: newNameIndex,
+          numberIndex: newNumberIndex
+        };
       });
 
       // If we're in favorites tab and unfavoriting, remove the channel
       if (activeTab === 'favorites' && !updatedChannel.isFavorite) {
         setChannels(prev => prev.filter(ch => ch.channel_number !== updatedChannel.channel_number));
       }
-
-      // If we're in favorites tab and favoriting, we might need to reload the list
-      if (activeTab === 'favorites' && updatedChannel.isFavorite) {
-        loadChannels(false);
+      // If we're in favorites tab and favoriting, add the channel
+      else if (activeTab === 'favorites' && updatedChannel.isFavorite) {
+        setChannels(prev => {
+          if (!prev.some(ch => ch.channel_number === updatedChannel.channel_number)) {
+            return [...prev, updatedChannel];
+          }
+          return prev;
+        });
       }
+
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
+      // Revert all states if the backend call fails
+      const revertChannelInState = (ch: Channel) => 
+        ch.channel_number === channel.channel_number 
+          ? { ...ch, isFavorite: channel.isFavorite }
+          : ch;
+
+      setChannels(prev => prev.map(revertChannelInState));
+      setGroupChannels(prev => {
+        const newState = { ...prev };
+        Object.keys(newState).forEach(group => {
+          if (newState[group]) {
+            newState[group] = newState[group].map(revertChannelInState);
+          }
+        });
+        return newState;
+      });
     }
   };
 
@@ -614,6 +664,20 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     };
   }, []);
 
+  // Reload the favorites list when switching to the favorites tab
+  useEffect(() => {
+    if (activeTab === 'favorites') {
+      loadChannels(false);
+    }
+  }, [activeTab, loadChannels]);
+
+  const handleChannelSelect = (channel: Channel) => {
+    // Add to recent channels
+    recentChannelsService.addRecentChannel(channel);
+    // Call the original onChannelSelect
+    onChannelSelect(channel);
+  };
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1 }}>
@@ -705,7 +769,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                     key={channel.channel_number}
                     channel={channel}
                     selected={channel.channel_number === selectedChannel?.channel_number}
-                    onSelect={onChannelSelect}
+                    onSelect={handleChannelSelect}
                     onToggleFavorite={handleToggleFavorite}
                     showChannelNumbers={showChannelNumbers}
                   />
@@ -721,7 +785,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
               <ChannelListItem 
                 channel={channel}
                 selected={channel.channel_number === selectedChannel?.channel_number}
-                onSelect={onChannelSelect}
+                onSelect={handleChannelSelect}
                 onToggleFavorite={handleToggleFavorite}
                 showChannelNumbers={showChannelNumbers}
               />

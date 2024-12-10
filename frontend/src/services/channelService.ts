@@ -53,24 +53,29 @@ export const channelService = {
   },
 
   async toggleFavorite(channelNumber: number): Promise<Channel> {
-    const response = await fetch(
-      `${API_URL}/channels/${channelNumber}/favorite`,
-      {
+    try {
+      const response = await fetch(`${API_URL}/channels/${channelNumber}/favorite`, {
         method: 'PUT',
-      }
-    );
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Failed to toggle favorite: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      // Convert the response to match our Channel interface
+      return {
+        ...data,
+        isFavorite: data.is_favorite, // Map the snake_case to camelCase
+        lastWatched: data.last_watched ? new Date(data.last_watched) : undefined,
+      };
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      throw error;
     }
-    const data = await response.json();
-    
-    // Transform snake_case to camelCase
-    return {
-      ...data,
-      isFavorite: data.is_favorite,
-      lastWatched: data.last_watched ? new Date(data.last_watched) : undefined
-    };
   },
 
   async refreshM3U(url: string, onProgress?: ProgressCallback): Promise<void> {

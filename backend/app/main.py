@@ -121,6 +121,8 @@ async def get_channels(
 async def toggle_favorite(channel_number: int, db: Session = Depends(database.get_db)):
     """Toggle favorite status for a channel"""
     logger.info(f"Toggling favorite status for channel {channel_number}")
+
+    # Get the channel
     channel = (
         db.query(models.Channel)
         .filter(models.Channel.channel_number == channel_number)
@@ -130,9 +132,22 @@ async def toggle_favorite(channel_number: int, db: Session = Depends(database.ge
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    # Toggle the favorite status
     channel.is_favorite = not channel.is_favorite
-    db.commit()
-    return channel
+
+    try:
+        # Commit the change to the database
+        db.commit()
+        # Refresh the channel object to ensure we have the latest data
+        db.refresh(channel)
+        logger.info(
+            f"Channel {channel_number} favorite status updated to: {channel.is_favorite}"
+        )
+        return channel
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update favorite status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update favorite status")
 
 
 m3u_service = M3UService()
