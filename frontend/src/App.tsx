@@ -225,12 +225,17 @@ function App() {
             {/* Video Player */}
             {settings.m3uUrl && (
               <Box sx={{ 
-                width: '100%', 
-                mt: 5,
-                height: 'calc(100% - 48px)'
+                width: '100%',
+                height: 'calc(100vh - 80px)', // Adjust based on your header height
+                display: 'flex',
+                flexDirection: 'column',
+                mt: 2
               }}>
                 {selectedChannel ? (
-                  <VideoPlayer url={selectedChannel.url} />
+                  <VideoPlayer 
+                    url={selectedChannel.url} 
+                    channel={selectedChannel}
+                  />
                 ) : (
                   <Box 
                     sx={{ 
