@@ -16,7 +16,10 @@ try:
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             url TEXT NOT NULL,
-            description TEXT,
+            "group" TEXT,
+            logo TEXT,
+            is_favorite BOOLEAN DEFAULT FALSE,
+            last_watched TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )"""
     )
@@ -25,14 +28,13 @@ try:
     conn.commit()
     logger.info("Database initialization completed successfully")
 
-except sqlite3.Error as e:
+except sqlite3.OperationalError as e:
     logger.error(f"Database error: {e}")
     raise
 finally:
+    logger.info("Database was successfully initialized. Closing connection...")
+    if cursor:
+        cursor.close()
     if conn:
-        try:
-            logger.info("Database was successfully initialized. Closing connection...")
-            conn.close()
-            logger.info("Database connection closed")
-        except sqlite3.Error as e:
-            logger.error(f"Error closing database connection: {e}")
+        conn.close()
+    logger.info("Database connection closed (all operations successfully completed)")

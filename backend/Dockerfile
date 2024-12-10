@@ -17,10 +17,7 @@ RUN poetry install --no-root --no-dev
 # Copy application code
 COPY . .
 
-# Make startup script executable
-RUN chmod +x startup.sh
-
-# Run the startup script
-CMD ["./startup.sh"]
+# Run FastAPI
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 ENV PYTHONUNBUFFERED=1

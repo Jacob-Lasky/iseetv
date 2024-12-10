@@ -8,7 +8,11 @@ services:
     working_dir: /app
     command: >
       /bin/bash -c "
-        python init_db.py
+        chmod -R 777 /data || true;
+        chown -R nobody:users /data || true;
+        python init_db.py;
+        chmod -R 777 /data || true;
+        chown -R nobody:users /data || true;
       "
 
   frontend:
@@ -38,7 +42,7 @@ services:
       - ./data:/data
     networks:
       - app-network
-    user: "1000:1000"
+    user: "nobody:users"
     depends_on:
       init-db:
         condition: service_completed_successfully
