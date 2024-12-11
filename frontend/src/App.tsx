@@ -6,7 +6,6 @@ import { Settings as SettingsIcon } from '@mui/icons-material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import { SettingsModal } from './components/SettingsModal';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ChannelList } from './components/ChannelList';
@@ -27,7 +26,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [downloadProgress, setDownloadProgress] = useState<{ loaded: number; total: number }>();
-  const [refreshChannelList, setRefreshChannelList] = useState<(() => Promise<void>) | undefined>(undefined);
 
   const theme = React.useMemo(() => createTheme({
     palette: {
@@ -90,44 +88,6 @@ function App() {
     setSettings({ ...settings, theme });
   };
 
-  const handleRefreshM3U = async () => {
-    if (!settings.m3uUrl) return;
-    
-    try {
-      setIsLoading(true);
-      setError(undefined);
-      setDownloadProgress(undefined);
-      
-      // First refresh the M3U
-      await channelService.refreshM3U(
-        settings.m3uUrl,
-        (loaded: number, total: number) => setDownloadProgress({ loaded, total })
-      );
-
-      // Wait a moment for the database to update
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Then refresh the channel list
-      if (typeof refreshChannelList === 'function') {
-        await refreshChannelList();
-      } else {
-        console.warn('Channel list refresh function not available');
-        // Don't throw an error, just log a warning
-      }
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[App] Refresh error:', {
-        message: errorMessage,
-        error: err
-      });
-      setError(`Failed to refresh M3U: ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
-      setDownloadProgress(undefined);
-    }
-  };
-
   const handleToggleChannelNumbers = () => {
     const newSettings = {
       ...settings,
@@ -171,11 +131,6 @@ function App() {
                       <SettingsIcon />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title="Refresh Channels">
-                    <IconButton onClick={handleRefreshM3U} size="small">
-                      <RefreshIcon />
-                    </IconButton>
-                  </Tooltip>
                   <Tooltip title={settings.showChannelNumbers ? "Hide Channel Numbers" : "Show Channel Numbers"}>
                     <IconButton 
                       onClick={handleToggleChannelNumbers}
@@ -194,7 +149,6 @@ function App() {
                 selectedChannel={selectedChannel}
                 onChannelSelect={handleChannelSelect}
                 onToggleFavorite={handleToggleFavorite}
-                onRefresh={setRefreshChannelList}
                 showChannelNumbers={settings.showChannelNumbers}
                 onToggleChannelNumbers={handleToggleChannelNumbers}
               />

@@ -12,6 +12,7 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -26,6 +27,7 @@ import { ChannelGroup } from '../types/api';
 import { recentChannelsService } from '../services/recentChannelsService';
 import { FixedSizeList } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import { settingsService } from '../services/settingsService';
 
 export {};
 
@@ -187,6 +189,18 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
   );
 };
 
+// Add a debounce utility at the top of the file
+const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
+
 export const ChannelList: React.FC<ChannelListProps> = ({
   selectedChannel,
   onChannelSelect,
@@ -287,67 +301,69 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, [debouncedSearchTerm, activeTab]);
 
+  const loadGroupChannelsIfNeeded = useCallback(async (expandedGroupNames: string[]) => {
+    if (expandedGroupNames.length === 0) return;
+
+    setLoading(true);
+    try {
+      const promises = expandedGroupNames.map(group =>
+        channelService.getChannels(0, 1000, { group })
+      );
+
+      const responses = await Promise.all(promises);
+      const newGroupChannels: Record<string, Channel[]> = {};
+      
+      expandedGroupNames.forEach((groupName, index) => {
+        newGroupChannels[groupName] = responses[index].items;
+      });
+
+      setGroupChannels(prev => ({
+        ...prev,
+        ...newGroupChannels
+      }));
+    } catch (error) {
+      console.error('Failed to load channels for expanded groups:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const loadGroups = useCallback(async () => {
+    if (groups.length > 0) return;
+
     try {
       const groups = await channelService.getGroups();
       setGroups(groups);
       
-      // Initialize expanded state for all groups
       const savedExpandedGroups = JSON.parse(
         localStorage.getItem(`channelListGroups_${activeTab}`) || '{}'
       );
       
-      setExpandedGroups(prev => {
-        const newState = { ...prev };
-        groups.forEach((group: ChannelGroup) => {
-          // Use saved state if available, otherwise default to collapsed
-          newState[group.name] = savedExpandedGroups[group.name] || false;
-        });
-        return newState;
-      });
+      setExpandedGroups(savedExpandedGroups);
 
-      // Load channels for any groups that should be expanded
       const expandedGroupNames = Object.entries(savedExpandedGroups)
         .filter(([_, isExpanded]) => isExpanded)
         .map(([groupName]) => groupName);
 
       if (expandedGroupNames.length > 0) {
-        setLoading(true);
-        try {
-          const promises = expandedGroupNames.map(group =>
-            channelService.getChannels(0, 1000, { group })
-          );
-
-          const responses = await Promise.all(promises);
-          const newGroupChannels: Record<string, Channel[]> = {};
-          
-          expandedGroupNames.forEach((groupName, index) => {
-            newGroupChannels[groupName] = responses[index].items;
-          });
-
-          setGroupChannels(prev => ({
-            ...prev,
-            ...newGroupChannels
-          }));
-        } catch (error) {
-          console.error('Failed to load channels for expanded groups:', error);
-        } finally {
-          setLoading(false);
-        }
+        await loadGroupChannelsIfNeeded(expandedGroupNames);
       }
     } catch (error) {
       console.error('Failed to load groups:', error);
     }
-  }, [activeTab]);
+  }, [activeTab, groups.length, loadGroupChannelsIfNeeded]);
 
-  // Add an initialization effect
+  // Update the initialization effect
   useEffect(() => {
+    let mounted = true;
+
     const initializeList = async () => {
-      await loadGroups();
+      if (!mounted) return;
       
-      // If we're not on the "all" tab, load appropriate channels
-      if (activeTab === 'favorites') {
-        loadChannels(false);
+      if (activeTab === 'all') {
+        await loadGroups();
+      } else if (activeTab === 'favorites') {
+        await loadChannels(false);
       } else if (activeTab === 'recent') {
         const recentChannels = recentChannelsService.getRecentChannels();
         setChannels(recentChannels);
@@ -355,7 +371,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     };
 
     initializeList();
-  }, [activeTab, loadChannels, loadGroups]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeTab, loadGroups, loadChannels]);
 
   const handleChannelInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -399,17 +419,28 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           : ch
       ));
 
-      // If we're in favorites tab and unfavoriting, remove the channel
-      if (activeTab === 'favorites' && !updatedChannel.isFavorite) {
-        setChannels(prev => prev.filter(ch => ch.channel_number !== updatedChannel.channel_number));
+      // If we're in favorites tab, refresh the list
+      if (activeTab === 'favorites') {
+        const response = await channelService.getChannels(0, 1000, {
+          favoritesOnly: true
+        });
+        setChannels(response.items);
       }
-      // If we're in favorites tab and favoriting, add the channel
-      else if (activeTab === 'favorites' && updatedChannel.isFavorite) {
-        setChannels(prev => {
-          if (!prev.some(ch => ch.channel_number === updatedChannel.channel_number)) {
-            return [...prev, updatedChannel];
-          }
-          return prev;
+      // If we're in all tab, update the group channels
+      else if (activeTab === 'all') {
+        // Update the channel in group channels
+        setGroupChannels(prev => {
+          const newState = { ...prev };
+          Object.keys(newState).forEach(group => {
+            if (newState[group]) {
+              newState[group] = newState[group].map(ch =>
+                ch.channel_number === updatedChannel.channel_number
+                  ? { ...ch, isFavorite: updatedChannel.isFavorite }
+                  : ch
+              );
+            }
+          });
+          return newState;
         });
       }
 
@@ -434,58 +465,42 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   };
 
-  // Move refresh function definition before the useEffect
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      await loadGroups();
-      await loadChannels(false);
-    } catch (error) {
-      console.error('Failed to refresh channel list:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadGroups, loadChannels]);
+  // Update the debounced refresh to return a Promise
+  const debouncedRefresh = useCallback(
+    () => new Promise<void>(resolve => {
+      debounce(async () => {
+        setLoading(true);
+        try {
+          if (activeTab === 'all') {
+            await loadGroups();
+          } else if (activeTab === 'favorites') {
+            await loadChannels(false);
+          } else if (activeTab === 'recent') {
+            const recentChannels = recentChannelsService.getRecentChannels();
+            setChannels(recentChannels);
+          }
+        } catch (error) {
+          console.error('Failed to refresh channel list:', error);
+        } finally {
+          setLoading(false);
+          resolve();
+        }
+      }, 500)();
+    }),
+    [activeTab, loadGroups, loadChannels]
+  );
 
-  // Set the refresh function immediately when component mounts
+  // Use the debounced version in the component
   useEffect(() => {
     if (onRefresh) {
-      onRefresh(refresh);
+      onRefresh(debouncedRefresh);
     }
     return () => {
       if (onRefresh) {
         onRefresh(undefined);
       }
     };
-  }, [onRefresh, refresh]);
-
-  // Add this helper function at component level
-  const loadGroupChannelsIfNeeded = useCallback(async (expandedGroupNames: string[]) => {
-    if (expandedGroupNames.length === 0) return;
-
-    setLoading(true);
-    try {
-      const promises = expandedGroupNames.map(group =>
-        channelService.getChannels(0, 1000, { group })
-      );
-
-      const responses = await Promise.all(promises);
-      const newGroupChannels: Record<string, Channel[]> = {};
-      
-      expandedGroupNames.forEach((groupName, index) => {
-        newGroupChannels[groupName] = responses[index].items;
-      });
-
-      setGroupChannels(prev => ({
-        ...prev,
-        ...newGroupChannels
-      }));
-    } catch (error) {
-      console.error('Failed to load channels for expanded groups:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  }, [onRefresh, debouncedRefresh]);
 
   // Update handleTabChange to preload data
   const handleTabChange = async (_: any, newValue: TabValue) => {
@@ -606,6 +621,29 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }));
   }, [activeTab]);
 
+  // Update refreshChannels to use debouncedRefresh
+  const refreshChannels = async () => {
+    setLoading(true);
+    try {
+      const settings = settingsService.getSettings();
+      if (settings.m3uUrl) {
+        await channelService.refreshM3U(settings.m3uUrl);
+      }
+
+      // Use debouncedRefresh instead of refresh
+      await debouncedRefresh();
+    } catch (error) {
+      console.error('Failed to refresh channels:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Call refreshChannels when the refresh button is clicked
+  const handleRefreshClick = () => {
+    refreshChannels();
+  };
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1 }}>
@@ -686,6 +724,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           <CircularProgress size={24} />
         </Box>
       )}
+
+      <Button onClick={handleRefreshClick}>Refresh Channels</Button>
     </Paper>
   );
 }; 
