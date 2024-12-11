@@ -7,13 +7,16 @@
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.15.11",
     "@mui/material": "^5.15.11",
+    "@types/react-virtualized-auto-sizer": "^1.0.4",
+    "@types/react-window": "^1.8.8",
     "cra-template": "1.2.0",
+    "hls.js": "^1.4.12",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "web-vitals": "^4.2.4",
-    "hls.js": "^1.4.12",
-    "@types/hls.js": "^1.0.0"
+    "react-virtualized-auto-sizer": "^1.0.24",
+    "react-window": "^1.8.10",
+    "web-vitals": "^4.2.4"
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",

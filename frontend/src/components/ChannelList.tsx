@@ -1,13 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
-  List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Paper,
-  Typography,
-  Divider,
   Avatar,
   TextField,
   IconButton,
@@ -15,7 +12,6 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
-  Collapse,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -28,6 +24,8 @@ import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { ChannelGroup } from '../types/api';
 import { recentChannelsService } from '../services/recentChannelsService';
+import { FixedSizeList } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 export {};
 
@@ -49,6 +47,7 @@ interface ChannelListItemProps {
   onToggleFavorite: (channel: Channel) => void;
   indented?: boolean;
   showChannelNumbers?: boolean;
+  style?: React.CSSProperties;
 }
 
 const ChannelListItem: React.FC<ChannelListItemProps> = ({
@@ -58,11 +57,13 @@ const ChannelListItem: React.FC<ChannelListItemProps> = ({
   onToggleFavorite,
   indented = false,
   showChannelNumbers = false,
+  style,
 }) => (
   <ListItemButton
     selected={selected}
     onClick={() => onSelect(channel)}
     sx={{ pl: indented ? 4 : 2 }}
+    style={style}
   >
     <IconButton
       size="small"
@@ -96,10 +97,95 @@ interface TabState {
   expandedGroups: Record<string, boolean>;
 }
 
-interface ChannelIndex {
-  nameIndex: Map<string, Channel[]>;
-  numberIndex: Map<number, Channel>;
+interface VirtualizedChannelListProps {
+  items: (Channel | ChannelGroup)[];
+  expandedGroups: Record<string, boolean>;
+  onToggleGroup: (group: string) => void;
+  selectedChannel?: Channel;
+  onChannelSelect: (channel: Channel) => void;
+  onToggleFavorite: (channel: Channel) => void;
+  showChannelNumbers?: boolean;
+  initialScrollOffset?: number;
+  onScroll?: (scrollOffset: number) => void;
 }
+
+interface AutoSizerProps {
+  height: number;
+  width: number;
+}
+
+const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
+  items,
+  expandedGroups,
+  onToggleGroup,
+  selectedChannel,
+  onChannelSelect,
+  onToggleFavorite,
+  showChannelNumbers,
+  initialScrollOffset = 0,
+  onScroll,
+}) => {
+  const listRef = useRef<FixedSizeList>(null);
+
+  // Restore scroll position when items change
+  useEffect(() => {
+    if (listRef.current && initialScrollOffset > 0) {
+      listRef.current.scrollTo(initialScrollOffset);
+    }
+  }, [initialScrollOffset, items]);
+
+  const handleScroll = ({ scrollOffset }: { scrollOffset: number }) => {
+    onScroll?.(scrollOffset);
+  };
+
+  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const item = items[index];
+    
+    if (!item) return null;
+
+    if ('count' in item) { // Group header
+      return (
+        <ListItemButton 
+          onClick={() => onToggleGroup(item.name)}
+          style={style}
+        >
+          <ListItemText primary={`${item.name} (${item.count})`} />
+          {expandedGroups[item.name] ? <ExpandLess /> : <ExpandMore />}
+        </ListItemButton>
+      );
+    }
+    
+    // Channel item
+    return (
+      <ChannelListItem
+        channel={item}
+        selected={item.channel_number === selectedChannel?.channel_number}
+        onSelect={onChannelSelect}
+        onToggleFavorite={onToggleFavorite}
+        showChannelNumbers={showChannelNumbers}
+        style={style}
+      />
+    );
+  };
+
+  return (
+    <AutoSizer>
+      {({ height, width }: AutoSizerProps) => (
+        <FixedSizeList
+          ref={listRef}
+          height={height}
+          width={width}
+          itemCount={items.length}
+          itemSize={56}
+          initialScrollOffset={initialScrollOffset}
+          onScroll={handleScroll}
+        >
+          {Row}
+        </FixedSizeList>
+      )}
+    </AutoSizer>
+  );
+};
 
 export const ChannelList: React.FC<ChannelListProps> = ({
   selectedChannel,
@@ -114,23 +200,53 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const [channelInput, setChannelInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(() => {
-    // Load saved page from localStorage
-    const saved = localStorage.getItem('channelListPage');
-    return saved ? parseInt(saved) : 0;
-  });
-  const pageSize = 50;
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const listRef = useRef<HTMLDivElement>(null);
   const [groups, setGroups] = useState<ChannelGroup[]>([]);
   const [groupChannels, setGroupChannels] = useState<Record<string, Channel[]>>({});
-  const [channelIndex, setChannelIndex] = useState<ChannelIndex>({
-    nameIndex: new Map(),
-    numberIndex: new Map()
-  });
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  // Replace separate scroll positions and expandedGroups with combined tab state
+  const filteredChannels = React.useMemo(() => {
+    let filtered = channels;
+
+    if (activeTab === 'favorites') {
+      filtered = filtered.filter(c => c.isFavorite);
+    } else if (activeTab === 'recent') {
+      filtered = recentChannelsService.getRecentChannels();
+    }
+
+    if (debouncedSearchTerm) {
+      const search = debouncedSearchTerm.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.name.toLowerCase().includes(search) ||
+        c.channel_number.toString().includes(search)
+      );
+    }
+
+    return filtered;
+  }, [channels, debouncedSearchTerm, activeTab]);
+
+  const virtualizedItems = React.useMemo(() => {
+    if (activeTab === 'all' && !debouncedSearchTerm) {
+      return groups.reduce<(Channel | ChannelGroup)[]>((acc, group) => {
+        acc.push(group);
+        if (expandedGroups[group.name] && groupChannels[group.name]) {
+          acc.push(...groupChannels[group.name]);
+        }
+        return acc;
+      }, []);
+    }
+    
+    return filteredChannels;
+  }, [
+    activeTab,
+    debouncedSearchTerm,
+    groups,
+    expandedGroups,
+    groupChannels,
+    filteredChannels
+  ]);
+
   const [tabStates, setTabStates] = useState<Record<TabValue, TabState>>({
     all: {
       scrollPosition: parseInt(localStorage.getItem('channelListScroll_all') || '0'),
@@ -146,9 +262,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     },
   });
 
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-
   const initiateSearch = useCallback((term: string) => {
     setDebouncedSearchTerm(term);
   }, []);
@@ -157,8 +270,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     try {
       setLoading(true);
       const response = await channelService.getChannels(
-        loadMore ? page * pageSize : 0,
-        pageSize,
+        0,  // Start from beginning
+        1000,  // Load more items at once
         {
           search: debouncedSearchTerm,
           group: activeTab === 'all' ? undefined : activeTab,
@@ -166,19 +279,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         }
       );
 
-      // Only replace channels if we're not in the 'all' tab or it's the first load
-      if (activeTab !== 'all' || !loadMore) {
-        setChannels(prev => 
-          loadMore ? [...prev, ...response.items] : response.items
-        );
-      }
-      setHasMore(response.items.length === pageSize);
+      setChannels(response.items);
     } catch (error) {
       console.error('Failed to load channels:', error);
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearchTerm, activeTab, pageSize]);
+  }, [debouncedSearchTerm, activeTab]);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -186,43 +293,21 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       setGroups(groups);
       
       // Initialize expanded state for all groups
+      const savedExpandedGroups = JSON.parse(
+        localStorage.getItem(`channelListGroups_${activeTab}`) || '{}'
+      );
+      
       setExpandedGroups(prev => {
         const newState = { ...prev };
         groups.forEach((group: ChannelGroup) => {
-          if (!(group.name in newState)) {
-            newState[group.name] = false;  // All collapsed by default
-          }
+          // Use saved state if available, otherwise default to collapsed
+          newState[group.name] = savedExpandedGroups[group.name] || false;
         });
         return newState;
       });
-    } catch (error) {
-      console.error('Failed to load groups:', error);
-    }
-  }, []);
 
-  // Combine the initialization effects into one and load channels for expanded groups
-  useEffect(() => {
-    // Initialize expanded groups from the current tab's state
-    const savedExpandedGroups = tabStates[activeTab].expandedGroups;
-    
-    // Only set groups as expanded if we actually have their channels loaded
-    // OR if we're currently loading them (group is marked as expanded)
-    const validExpandedGroups = { ...savedExpandedGroups };
-    Object.keys(savedExpandedGroups).forEach(group => {
-      // Keep the group expanded if it's already expanded, even if channels aren't loaded yet
-      if (savedExpandedGroups[group] === true) {
-        validExpandedGroups[group] = true;
-      }
-    });
-    
-    setExpandedGroups(validExpandedGroups);
-
-    // Save the corrected state back to localStorage
-    localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify(validExpandedGroups));
-
-    // Load channels for any expanded groups
-    const loadExpandedGroups = async () => {
-      const expandedGroupNames = Object.entries(validExpandedGroups)
+      // Load channels for any groups that should be expanded
+      const expandedGroupNames = Object.entries(savedExpandedGroups)
         .filter(([_, isExpanded]) => isExpanded)
         .map(([groupName]) => groupName);
 
@@ -230,192 +315,47 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         setLoading(true);
         try {
           const promises = expandedGroupNames.map(group =>
-            channelService.getChannels(0, 1000, {
-              group,
-              search: debouncedSearchTerm,
-              favoritesOnly: activeTab === 'favorites'
-            })
+            channelService.getChannels(0, 1000, { group })
           );
 
           const responses = await Promise.all(promises);
-          const allChannels = responses.flatMap(response => response.items);
+          const newGroupChannels: Record<string, Channel[]> = {};
           
-          // Update channels without clearing existing ones
-          setChannels(prev => {
-            const uniqueChannels = [...prev];
-            allChannels.forEach(channel => {
-              const exists = uniqueChannels.some(c => c.channel_number === channel.channel_number);
-              if (!exists) {
-                uniqueChannels.push(channel);
-              }
-            });
-            return uniqueChannels;
+          expandedGroupNames.forEach((groupName, index) => {
+            newGroupChannels[groupName] = responses[index].items;
           });
+
+          setGroupChannels(prev => ({
+            ...prev,
+            ...newGroupChannels
+          }));
         } catch (error) {
           console.error('Failed to load channels for expanded groups:', error);
         } finally {
           setLoading(false);
         }
       }
-    };
-
-    // Restore scroll position
-    const listElement = listRef.current;
-    if (listElement) {
-      requestAnimationFrame(() => {
-        listElement.scrollTop = tabStates[activeTab].scrollPosition;
-      });
+    } catch (error) {
+      console.error('Failed to load groups:', error);
     }
+  }, [activeTab]);
 
-    loadExpandedGroups();
-  }, [activeTab, tabStates, debouncedSearchTerm, groupChannels]);
-
-  // Save page number when it changes
+  // Add an initialization effect
   useEffect(() => {
-    localStorage.setItem('channelListPage', page.toString());
-  }, [page]);
-
-  // Initial load of both groups and channels
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      try {
-        // Load groups first
-        await loadGroups();
-        // Only load initial channels if we're not in the 'all' tab
-        if (activeTab !== 'all') {
-          await loadChannels(false);
-        }
-      } catch (error) {
-        console.error('Failed to initialize channel list:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    init();
-  }, [loadGroups, loadChannels, activeTab]);
-
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-
-    // Load more when near bottom
-    if (scrollHeight - scrollTop - clientHeight < 100 && !loading && hasMore) {
-      setPage(prev => prev + 1);
-      loadChannels(true);
-    }
-  }, [loading, hasMore, loadChannels]);
-
-  const updateChannelIndex = useCallback((channels: Channel[]) => {
-    const nameIndex = new Map<string, Channel[]>();
-    const numberIndex = new Map<number, Channel>();
-
-    channels.forEach(channel => {
-      // Index by channel number
-      numberIndex.set(channel.channel_number, channel);
-
-      // Index by name - split into words for partial matching
-      const words = channel.name.toLowerCase().split(/\s+/);
-      words.forEach(word => {
-        const existing = nameIndex.get(word) || [];
-        nameIndex.set(word, [...existing, channel]);
-      });
-    });
-
-    setChannelIndex({ nameIndex, numberIndex });
-  }, []);
-
-  // Update the filteredChannels memo to use the index for searching
-  const filteredChannels = React.useMemo(() => {
-    let filtered = channels;
-
-    if (activeTab === 'favorites') {
-      filtered = filtered.filter(c => c.isFavorite);
-    } else if (activeTab === 'recent') {
-      filtered = recentChannelsService.getRecentChannels();
-    }
-
-    if (debouncedSearchTerm) {
-      const search = debouncedSearchTerm.toLowerCase();
-      const searchWords = search.split(/\s+/);
+    const initializeList = async () => {
+      await loadGroups();
       
-      if (channelIndex.nameIndex.size > 0) {
-        const matchingSets = searchWords.map(word => {
-          const matches: Channel[] = [];
-          channelIndex.nameIndex.forEach((channels, indexWord) => {
-            if (indexWord.includes(word)) {
-              matches.push(...channels);
-            }
-          });
-          return matches;
-        });
-
-        // Find channels that match all search words
-        filtered = matchingSets.reduce((acc, matches) => {
-          if (acc.length === 0) return matches;
-          return acc.filter(channel => 
-            matches.some(match => match.channel_number === channel.channel_number)
-          );
-        }, [] as Channel[]);
-      } else {
-        filtered = filtered.filter(c => 
-          c.name.toLowerCase().includes(search) ||
-          c.channel_number.toString().includes(search)
-        );
+      // If we're not on the "all" tab, load appropriate channels
+      if (activeTab === 'favorites') {
+        loadChannels(false);
+      } else if (activeTab === 'recent') {
+        const recentChannels = recentChannelsService.getRecentChannels();
+        setChannels(recentChannels);
       }
-    }
+    };
 
-    return filtered;
-  }, [channels, debouncedSearchTerm, activeTab, channelIndex]);
-
-  // Update the index when channels change
-  useEffect(() => {
-    updateChannelIndex(channels);
-  }, [channels, updateChannelIndex]);
-
-  // Update the groupedChannels memo to also use the index
-  const groupedChannels = React.useMemo(() => {
-    const result: Record<string, Channel[]> = {};
-    Object.entries(groupChannels).forEach(([group, channels]) => {
-      if (debouncedSearchTerm) {
-        const search = debouncedSearchTerm.toLowerCase();
-        const searchWords = search.split(/\s+/);
-        
-        // Use index for searching
-        if (channelIndex.nameIndex.size > 0) {
-          const matchingSets = searchWords.map(word => {
-            const matches: Channel[] = [];
-            channelIndex.nameIndex.forEach((indexedChannels, indexWord) => {
-              if (indexWord.includes(word)) {
-                indexedChannels.forEach(channel => {
-                  if (channel.group === group) {
-                    matches.push(channel);
-                  }
-                });
-              }
-            });
-            return matches;
-          });
-
-          // Find channels that match all search words
-          result[group] = matchingSets.reduce((acc, matches) => {
-            if (acc.length === 0) return matches;
-            return acc.filter(channel => 
-              matches.some(match => match.channel_number === channel.channel_number)
-            );
-          }, [] as Channel[]);
-        } else {
-          // Fallback
-          result[group] = channels.filter(channel =>
-            channel.name.toLowerCase().includes(search)
-          );
-        }
-      } else {
-        result[group] = channels;
-      }
-    });
-    return result;
-  }, [groupChannels, debouncedSearchTerm, channelIndex]);
+    initializeList();
+  }, [activeTab, loadChannels, loadGroups]);
 
   const handleChannelInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -458,27 +398,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           ? { ...ch, isFavorite: updatedChannel.isFavorite }
           : ch
       ));
-
-      // Update channel index
-      setChannelIndex(prev => {
-        const newNameIndex = new Map(prev.nameIndex);
-        newNameIndex.forEach((channels, word) => {
-          newNameIndex.set(word, channels.map(updateChannelInState));
-        });
-        
-        const newNumberIndex = new Map(prev.numberIndex);
-        if (newNumberIndex.has(updatedChannel.channel_number)) {
-          newNumberIndex.set(updatedChannel.channel_number, {
-            ...newNumberIndex.get(updatedChannel.channel_number)!,
-            isFavorite: updatedChannel.isFavorite
-          });
-        }
-        
-        return {
-          nameIndex: newNameIndex,
-          numberIndex: newNumberIndex
-        };
-      });
 
       // If we're in favorites tab and unfavoriting, remove the channel
       if (activeTab === 'favorites' && !updatedChannel.isFavorite) {
@@ -542,51 +461,25 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Update tab change handler to handle scroll position better
   const handleTabChange = (_: any, newValue: TabValue) => {
-    if (listRef.current) {
-      const listElement = listRef.current;
-      // Save current scroll position
-      const currentScrollPosition = listElement.scrollTop;
-      
-      // Save to localStorage and state
-      localStorage.setItem(`channelListScroll_${activeTab}`, currentScrollPosition.toString());
-      setTabStates(prev => ({
-        ...prev,
-        [activeTab]: {
-          ...prev[activeTab],
-          scrollPosition: currentScrollPosition
-        }
-      }));
+    // Change tab
+    setActiveTab(newValue);
+    
+    // Reset search
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
 
-      // Change tab
-      setActiveTab(newValue);
-
-      // Reset scroll position immediately to prevent jumps
-      listElement.scrollTop = 0;
+    // Load appropriate data for the new tab
+    if (newValue === 'favorites') {
+      loadChannels(false);
+    } else if (newValue === 'recent') {
+      const recentChannels = recentChannelsService.getRecentChannels();
+      setChannels(recentChannels);
+    } else if (newValue === 'all') {
+      loadGroups();
     }
   };
 
-  // Update scroll position restoration effect
-  useEffect(() => {
-    const listElement = listRef.current;
-    if (!listElement) return;
-
-    // Use a small timeout to ensure the content is rendered
-    const timer = setTimeout(() => {
-      const savedPosition = tabStates[activeTab].scrollPosition;
-      // Calculate maximum scroll position
-      const maxScroll = listElement.scrollHeight - listElement.clientHeight;
-      // Use the smaller of saved position or maximum scroll
-      const safeScrollPosition = Math.min(savedPosition, maxScroll);
-      listElement.scrollTop = safeScrollPosition;
-    }, 100); // Increased timeout to ensure content is fully rendered
-
-    return () => clearTimeout(timer);
-  }, [activeTab, tabStates, channels, groupChannels]); // Added dependencies to re-run when content changes
-
   const handleToggleGroup = async (group: string) => {
-    // Store current scroll position
-    const currentScrollPosition = listRef.current?.scrollTop || 0;
-    
     const isExpanding = !expandedGroups[group];
     const newExpandedGroups = {
       ...expandedGroups,
@@ -595,18 +488,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     setExpandedGroups(newExpandedGroups);
 
     // Save expanded groups state for current tab
-    const newTabStates = {
-      ...tabStates,
-      [activeTab]: {
-        ...tabStates[activeTab],
-        expandedGroups: newExpandedGroups,
-        scrollPosition: currentScrollPosition  // Save current scroll position
-      }
-    };
-    setTabStates(newTabStates);
-    localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify(newExpandedGroups));
+    localStorage.setItem(
+      `channelListGroups_${activeTab}`, 
+      JSON.stringify(newExpandedGroups)
+    );
 
-    // Load channels if needed
+    // Load channels if expanding and not already loaded
     if (isExpanding && (!groupChannels[group] || groupChannels[group].length === 0)) {
       setLoading(true);
       try {
@@ -621,34 +508,20 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           [group]: response.items
         }));
 
-        // Restore scroll position after content loads
-        requestAnimationFrame(() => {
-          if (listRef.current) {
-            listRef.current.scrollTop = currentScrollPosition;
-          }
-        });
-
       } catch (error) {
         console.error('Failed to load channels for group:', error);
-        // If loading fails, revert the expanded state
+        // Revert expansion state on error
         setExpandedGroups(prev => ({
           ...prev,
           [group]: false
         }));
-        setTabStates(prev => ({
-          ...prev,
-          [activeTab]: {
-            ...prev[activeTab],
-            expandedGroups: {
-              ...prev[activeTab].expandedGroups,
-              [group]: false
-            }
-          }
-        }));
-        localStorage.setItem(`channelListGroups_${activeTab}`, JSON.stringify({
-          ...newExpandedGroups,
-          [group]: false
-        }));
+        localStorage.setItem(
+          `channelListGroups_${activeTab}`,
+          JSON.stringify({
+            ...newExpandedGroups,
+            [group]: false
+          })
+        );
       } finally {
         setLoading(false);
       }
@@ -677,6 +550,17 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     // Call the original onChannelSelect
     onChannelSelect(channel);
   };
+
+  const handleScroll = useCallback((scrollOffset: number) => {
+    localStorage.setItem(`channelListScroll_${activeTab}`, scrollOffset.toString());
+    setTabStates(prev => ({
+      ...prev,
+      [activeTab]: {
+        ...prev[activeTab],
+        scrollPosition: scrollOffset
+      }
+    }));
+  }, [activeTab]);
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -739,67 +623,27 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         <Tab label="Recent" value="recent" />
       </Tabs>
 
-      <List 
-        component="div"
-        ref={listRef}
-        onScroll={handleScroll}
-        sx={{ 
-          flexGrow: 1, 
-          overflow: 'auto',
-          position: 'relative' 
-        }}
-      >
-        {activeTab === 'all' && !debouncedSearchTerm ? (
-          // Show grouped channels only when not searching
-          groups.map(({ name: group, count }) => (
-            <Box key={group}>
-              <ListItemButton onClick={() => handleToggleGroup(group)} sx={{ pl: 2 }}>
-                <ListItemText
-                  primary={
-                    <Typography variant="subtitle1" color="primary" fontWeight="bold">
-                      {group} ({count})
-                    </Typography>
-                  }
-                />
-                {expandedGroups[group] ? <ExpandLess /> : <ExpandMore />}
-              </ListItemButton>
-              <Collapse in={expandedGroups[group]} timeout="auto">
-                {expandedGroups[group] && groupedChannels[group]?.map((channel) => (
-                  <ChannelListItem 
-                    key={channel.channel_number}
-                    channel={channel}
-                    selected={channel.channel_number === selectedChannel?.channel_number}
-                    onSelect={handleChannelSelect}
-                    onToggleFavorite={handleToggleFavorite}
-                    showChannelNumbers={showChannelNumbers}
-                  />
-                ))}
-              </Collapse>
-              <Divider />
-            </Box>
-          ))
-        ) : (
-          // Show flat list when searching or in other tabs
-          filteredChannels.slice(0, 50).map((channel) => (
-            <React.Fragment key={channel.channel_number}>
-              <ChannelListItem 
-                channel={channel}
-                selected={channel.channel_number === selectedChannel?.channel_number}
-                onSelect={handleChannelSelect}
-                onToggleFavorite={handleToggleFavorite}
-                showChannelNumbers={showChannelNumbers}
-              />
-              <Divider />
-            </React.Fragment>
-          ))
-        )}
-        
-        {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <CircularProgress size={24} />
-          </Box>
-        )}
-      </List>
+      <Box sx={{ flexGrow: 1 }}>
+        <VirtualizedChannelList
+          items={virtualizedItems}
+          expandedGroups={expandedGroups}
+          onToggleGroup={handleToggleGroup}
+          selectedChannel={selectedChannel}
+          onChannelSelect={handleChannelSelect}
+          onToggleFavorite={handleToggleFavorite}
+          showChannelNumbers={showChannelNumbers}
+          initialScrollOffset={tabStates[activeTab].scrollPosition}
+          onScroll={handleScroll}
+        />
+      </Box>
+
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <CircularProgress size={24} />
+        </Box>
+      )}
     </Paper>
   );
 }; 
+
+export type { ChannelListProps }; 

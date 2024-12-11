@@ -31,12 +31,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
     if (!videoRef.current) return;
 
     const video = videoRef.current;
-    
-    // Construct proxy URL
     const proxyUrl = `${API_URL}/stream/${channel.channel_number}`;
 
     if (Hls.isSupported()) {
-      // Cleanup previous instance
       if (hlsRef.current) {
         hlsRef.current.destroy();
       }
@@ -44,7 +41,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       const hls = new Hls({
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000, // 60MB
+        maxBufferSize: 60 * 1000 * 1000,
         manifestLoadingMaxRetry: 20,
         manifestLoadingRetryDelay: 1000,
         manifestLoadingMaxRetryTimeout: 30000,
@@ -59,11 +56,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       hls.attachMedia(video);
       
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play()
-          .catch(e => console.warn('Autoplay prevented:', e));
+        video.play().catch(e => console.warn('Autoplay prevented:', e));
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
+        console.warn('HLS error:', data);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
