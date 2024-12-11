@@ -459,24 +459,68 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     };
   }, [onRefresh, refresh]);
 
-  // Update tab change handler to handle scroll position better
-  const handleTabChange = (_: any, newValue: TabValue) => {
-    // Change tab
+  // Add this helper function at component level
+  const loadGroupChannelsIfNeeded = useCallback(async (expandedGroupNames: string[]) => {
+    if (expandedGroupNames.length === 0) return;
+
+    setLoading(true);
+    try {
+      const promises = expandedGroupNames.map(group =>
+        channelService.getChannels(0, 1000, { group })
+      );
+
+      const responses = await Promise.all(promises);
+      const newGroupChannels: Record<string, Channel[]> = {};
+      
+      expandedGroupNames.forEach((groupName, index) => {
+        newGroupChannels[groupName] = responses[index].items;
+      });
+
+      setGroupChannels(prev => ({
+        ...prev,
+        ...newGroupChannels
+      }));
+    } catch (error) {
+      console.error('Failed to load channels for expanded groups:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Update handleTabChange to preload data
+  const handleTabChange = async (_: any, newValue: TabValue) => {
+    // Load data before changing tab
+    if (newValue === 'all') {
+      // Get the expanded groups for the "all" tab
+      const savedExpandedGroups = JSON.parse(
+        localStorage.getItem(`channelListGroups_${newValue}`) || '{}'
+      );
+      
+      // Load groups first
+      await loadGroups();
+      
+      // Load channels for expanded groups
+      const expandedGroupNames = Object.entries(savedExpandedGroups)
+        .filter(([_, isExpanded]) => isExpanded)
+        .map(([groupName]) => groupName);
+        
+      await loadGroupChannelsIfNeeded(expandedGroupNames);
+      
+      // Set expanded state after data is loaded
+      setExpandedGroups(savedExpandedGroups);
+    } else if (newValue === 'favorites') {
+      await loadChannels(false);
+    } else if (newValue === 'recent') {
+      const recentChannels = recentChannelsService.getRecentChannels();
+      setChannels(recentChannels);
+    }
+
+    // Change tab after data is loaded
     setActiveTab(newValue);
     
     // Reset search
     setSearchTerm('');
     setDebouncedSearchTerm('');
-
-    // Load appropriate data for the new tab
-    if (newValue === 'favorites') {
-      loadChannels(false);
-    } else if (newValue === 'recent') {
-      const recentChannels = recentChannelsService.getRecentChannels();
-      setChannels(recentChannels);
-    } else if (newValue === 'all') {
-      loadGroups();
-    }
   };
 
   const handleToggleGroup = async (group: string) => {
