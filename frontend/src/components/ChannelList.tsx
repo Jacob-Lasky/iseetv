@@ -237,11 +237,28 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       );
     }
 
+    console.log('Filtered Channels:', filtered); // Debugging line
+
     return filtered;
   }, [channels, debouncedSearchTerm, activeTab]);
 
   const virtualizedItems = React.useMemo(() => {
-    if (activeTab === 'all' && !debouncedSearchTerm) {
+    // If searching in any tab, show filtered channels directly
+    if (debouncedSearchTerm) {
+      // If we're in "all" tab and searching, load all channels
+      if (activeTab === 'all') {
+        // Flatten all channels from groupChannels
+        const allChannels = Object.values(groupChannels).flat();
+        return allChannels.filter(c => 
+          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+          c.channel_number.toString().includes(debouncedSearchTerm)
+        );
+      }
+      return filteredChannels;
+    }
+
+    // If not searching, handle normal tab behavior
+    if (activeTab === 'all') {
       return groups.reduce<(Channel | ChannelGroup)[]>((acc, group) => {
         acc.push(group);
         if (expandedGroups[group.name] && groupChannels[group.name]) {
@@ -288,12 +305,24 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         1000,  // Load more items at once
         {
           search: debouncedSearchTerm,
-          group: activeTab === 'all' ? undefined : activeTab,
           favoritesOnly: activeTab === 'favorites'
         }
       );
 
-      setChannels(response.items);
+      if (activeTab === 'all') {
+        // Update groupChannels with the search results
+        const newGroupChannels: Record<string, Channel[]> = {};
+        response.items.forEach(channel => {
+          const group = channel.group || 'Uncategorized';
+          if (!newGroupChannels[group]) {
+            newGroupChannels[group] = [];
+          }
+          newGroupChannels[group].push(channel);
+        });
+        setGroupChannels(newGroupChannels);
+      } else {
+        setChannels(response.items);
+      }
     } catch (error) {
       console.error('Failed to load channels:', error);
     } finally {
@@ -644,6 +673,25 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     refreshChannels();
   };
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTerm = e.target.value;
+    setSearchTerm(newTerm);
+
+    // Clear any existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(newTerm);
+      // Load channels when search term changes
+      if (activeTab === 'all') {
+        loadChannels(false);
+      }
+    }, 300);
+  };
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1 }}>
@@ -652,20 +700,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           size="small"
           placeholder="Search channels..."
           value={searchTerm}
-          onChange={(e) => {
-            const newTerm = e.target.value;
-            setSearchTerm(newTerm);
-            
-            // Clear any existing timeout
-            if (searchTimeoutRef.current) {
-              clearTimeout(searchTimeoutRef.current);
-            }
-
-            // Set new timeout for debounced search
-            searchTimeoutRef.current = setTimeout(() => {
-              initiateSearch(newTerm);
-            }, 1000);
-          }}
+          onChange={handleSearchChange}
           onBlur={() => initiateSearch(searchTerm)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
