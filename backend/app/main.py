@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app import models, database
@@ -13,6 +13,10 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 import asyncio
 from sqlalchemy import func
+from fastapi.responses import StreamingResponse
+import httpx
+import m3u8
+from urllib.parse import urljoin
 
 
 # Simpler logging setup
@@ -213,4 +217,87 @@ async def get_channel_groups(db: Session = Depends(database.get_db)):
         ]
     except Exception as e:
         logger.error(f"Error getting channel groups: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stream/{channel_number}")
+async def stream_channel(
+    request: Request, channel_number: int, db: Session = Depends(database.get_db)
+):
+    channel = (
+        db.query(models.Channel)
+        .filter(models.Channel.channel_number == channel_number)
+        .first()
+    )
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    m3u8_url = f"{channel.url}.m3u8"
+
+    async def stream_for_30_seconds():
+        start_time = datetime.datetime.now()
+        while (datetime.datetime.now() - start_time).total_seconds() < 30:
+            try:
+                async with httpx.AsyncClient(
+                    timeout=30.0, follow_redirects=True
+                ) as client:
+                    response = await client.get(m3u8_url)
+                    if response.status_code != 200:
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail="Failed to fetch HLS manifest",
+                        )
+
+                    # Parse the m3u8 file
+                    playlist = m3u8.loads(response.text)
+
+                    # Log some info about the manifest
+                    logger.info(f"Segments: {len(playlist.segments)}")
+                    logger.info(f"Target Duration: {playlist.target_duration}")
+                    logger.info(
+                        f"Time elapsed: {(datetime.datetime.now() - start_time).total_seconds():.1f}s"
+                    )
+
+                    yield playlist.dumps().encode()
+                    await asyncio.sleep(2)  # Wait 2 seconds before next update
+
+            except Exception as e:
+                logger.error(f"Failed to fetch manifest: {str(e)}")
+                await asyncio.sleep(1)  # Wait before retry
+                continue
+
+        logger.info("30 second test complete, stopping stream")
+
+    return StreamingResponse(
+        content=stream_for_30_seconds(),
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.get("/segment/{channel_number}")
+async def get_segment(channel_number: int, url: str):
+    """Proxy endpoint for HLS segments"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, follow_redirects=True)
+            response.raise_for_status()
+
+            return StreamingResponse(
+                content=response.aiter_bytes(),
+                media_type="video/MP2T",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "Cache-Control": "public, max-age=86400",
+                },
+            )
+    except Exception as e:
+        logger.error(f"Segment fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
