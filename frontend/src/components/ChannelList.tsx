@@ -12,7 +12,6 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
-  Button,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -27,7 +26,6 @@ import { ChannelGroup } from '../types/api';
 import { recentChannelsService } from '../services/recentChannelsService';
 import { FixedSizeList } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
-import { settingsService } from '../services/settingsService';
 
 export {};
 
@@ -650,29 +648,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }));
   }, [activeTab]);
 
-  // Update refreshChannels to use debouncedRefresh
-  const refreshChannels = async () => {
-    setLoading(true);
-    try {
-      const settings = settingsService.getSettings();
-      if (settings.m3uUrl) {
-        await channelService.refreshM3U(settings.m3uUrl);
-      }
-
-      // Use debouncedRefresh instead of refresh
-      await debouncedRefresh();
-    } catch (error) {
-      console.error('Failed to refresh channels:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Call refreshChannels when the refresh button is clicked
-  const handleRefreshClick = () => {
-    refreshChannels();
-  };
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTerm = e.target.value;
     setSearchTerm(newTerm);
@@ -759,8 +734,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           <CircularProgress size={24} />
         </Box>
       )}
-
-      <Button onClick={handleRefreshClick}>Refresh Channels</Button>
     </Paper>
   );
 }; 
