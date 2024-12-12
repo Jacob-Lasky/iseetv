@@ -1,5 +1,4 @@
-import React from 'react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Container, Box, IconButton, ThemeProvider, CssBaseline, Drawer, useMediaQuery, Tooltip } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
 import { Settings as SettingsIcon } from '@mui/icons-material';
@@ -11,7 +10,6 @@ import { VideoPlayer } from './components/VideoPlayer';
 import { ChannelList } from './components/ChannelList';
 import { settingsService } from './services/settingsService';
 import { channelService } from './services/channelService';
-import { m3uService } from './services/m3uService';
 import type { Settings } from './models/Settings';
 import type { Channel } from './models/Channel';
 import { LoadingOverlay } from './components/LoadingOverlay';
@@ -64,12 +62,8 @@ function App() {
         setError(undefined);
         setDownloadProgress(undefined);
         
-        const newChannels = await m3uService.parseM3U(
-          newSettings.m3uUrl,
-          (loaded: number, total: number) => setDownloadProgress({ loaded, total })
-        );
+        await channelService.refreshM3U(newSettings.m3uUrl);
         
-        await channelService.saveChannels(newChannels);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         console.error('[App] Settings save error:', {

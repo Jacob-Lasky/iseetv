@@ -58,26 +58,30 @@ async def startup_event():
     logger.info("ISeeTV backend starting up...")
 
 
-@app.post("/channels/bulk")
-async def create_channels(
-    channels: List[ChannelBase], db: Session = Depends(database.get_db)
-):
-    logger.info(f"Starting bulk upload of {len(channels)} channels")
+@app.post("/m3u/refresh")
+async def refresh_m3u(url: str, db: Session = Depends(database.get_db)):
+    """Download and process M3U file from URL"""
+    logger.info(f"Starting M3U refresh from {url}")
+
     try:
+        # Download and parse M3U
+        channels = await m3u_service.download_and_parse(url)
+
         # Clear existing channels
         deleted_count = db.query(models.Channel).delete()
         logger.info(f"Deleted {deleted_count} existing channels")
 
-        # Bulk insert new channels
-        db_channels = [models.Channel(**channel.dict()) for channel in channels]
+        # Save new channels
+        db_channels = [models.Channel(**channel) for channel in channels]
         db.bulk_save_objects(db_channels)
         db.commit()
 
         logger.info(f"Successfully saved {len(channels)} channels")
         return {"message": f"Saved {len(channels)} channels"}
+
     except Exception as e:
-        logger.error(f"Error saving channels: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to refresh M3U: {str(e)}")
 
 
 @app.get("/channels")
@@ -155,44 +159,6 @@ async def toggle_favorite(channel_number: int, db: Session = Depends(database.ge
 
 
 m3u_service = M3UService()
-
-
-@app.post("/m3u/refresh")
-async def refresh_m3u(url: str, db: Session = Depends(database.get_db)):
-    """Download and process M3U file from URL"""
-    logger.info(f"Starting M3U refresh from {url}")
-
-    try:
-        # Download and parse M3U
-        channels = await m3u_service.download_and_parse(url)
-
-        # Clear existing channels
-        deleted_count = db.query(models.Channel).delete()
-        logger.info(f"Deleted {deleted_count} existing channels")
-
-        # Save new channels
-        db_channels = [models.Channel(**channel) for channel in channels]
-        db.bulk_save_objects(db_channels)
-        db.commit()
-
-        logger.info(f"Successfully saved {len(channels)} channels")
-        return {"message": f"Saved {len(channels)} channels"}
-
-    except Exception as e:
-        logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to refresh M3U: {str(e)}")
-
-
-@app.get("/test")
-async def test_endpoint():
-    logger.info("Received test request")
-    try:
-        response = {"message": "Hello from FastAPI backend!"}
-        logger.info(f"Sending response: {response}")
-        return response
-    except Exception as e:
-        logger.error(f"Error in test endpoint: {str(e)}")
-        raise
 
 
 @app.get("/channels/groups")

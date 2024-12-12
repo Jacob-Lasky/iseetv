@@ -1,8 +1,6 @@
 import { Channel } from '../models/Channel';
-import { ChannelGroup, ProgressCallback } from '../types/api';
+import { ChannelGroup } from '../types/api';
 import { API_URL } from '../config/api';
-
-export {};
 
 interface GetChannelsParams {
   search?: string;
@@ -38,20 +36,6 @@ export const channelService = {
     return response.json();
   },
 
-  async saveChannels(channels: Channel[]): Promise<void> {
-    const response = await fetch(`${API_URL}/channels/bulk`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(channels),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-  },
-
   async toggleFavorite(channelNumber: number): Promise<Channel> {
     try {
       const response = await fetch(`${API_URL}/channels/${channelNumber}/favorite`, {
@@ -66,10 +50,9 @@ export const channelService = {
       }
 
       const data = await response.json();
-      // Convert the response to match our Channel interface
       return {
         ...data,
-        isFavorite: data.is_favorite, // Map the snake_case to camelCase
+        isFavorite: data.is_favorite,
         lastWatched: data.last_watched ? new Date(data.last_watched) : undefined,
       };
     } catch (error) {
@@ -78,34 +61,13 @@ export const channelService = {
     }
   },
 
-  async refreshM3U(url: string, onProgress?: ProgressCallback): Promise<void> {
-    const response = await fetch(
-      `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}`,
-      {
-        method: 'POST',
-      }
-    );
-
+  async refreshM3U(url: string): Promise<void> {
+    const response = await fetch(`${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}`, {
+      method: 'POST'
+    });
+    
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error);
-    }
-
-    // Get the reader from the response body
-    const reader = response.body?.getReader();
-    const contentLength = +(response.headers.get('Content-Length') ?? '0');
-
-    if (reader && onProgress) {
-      let receivedLength = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) break;
-        
-        receivedLength += value.length;
-        onProgress(receivedLength, contentLength);
-      }
+      throw new Error(`Failed to refresh M3U: ${response.statusText}`);
     }
   },
 
@@ -115,5 +77,19 @@ export const channelService = {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
+  },
+
+  async saveChannels(channels: Channel[]): Promise<void> {
+    const response = await fetch(`${API_URL}/channels/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(channels),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
   },
 }; 
