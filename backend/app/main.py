@@ -17,9 +17,10 @@ from fastapi.responses import StreamingResponse
 import httpx
 import m3u8
 from urllib.parse import urljoin
+import requests
+import subprocess
+from .video_helpers import get_video_codec, transcode_to_h264
 
-
-# Simpler logging setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s:\t%(message)s",
@@ -187,9 +188,8 @@ async def get_channel_groups(db: Session = Depends(database.get_db)):
 
 
 @app.get("/stream/{channel_number}")
-async def stream_channel(
-    request: Request, channel_number: int, db: Session = Depends(database.get_db)
-):
+async def stream_channel(channel_number: int, db: Session = Depends(database.get_db)):
+    # Fetch the channel from the database
     channel = (
         db.query(models.Channel)
         .filter(models.Channel.channel_number == channel_number)
@@ -198,72 +198,97 @@ async def stream_channel(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    m3u8_url = f"{channel.url}.m3u8"
+    # Construct the m3u8 URL
+    original_url = f"{channel.url}.m3u8"
+    logger.info(f"Fetching HLS manifest from {original_url}")
 
-    async def stream_for_30_seconds():
-        start_time = datetime.datetime.now()
-        while (datetime.datetime.now() - start_time).total_seconds() < 30:
-            try:
-                async with httpx.AsyncClient(
-                    timeout=30.0, follow_redirects=True
-                ) as client:
-                    response = await client.get(m3u8_url)
-                    if response.status_code != 200:
-                        raise HTTPException(
-                            status_code=response.status_code,
-                            detail="Failed to fetch HLS manifest",
-                        )
+    try:
+        # Check if transcoding is needed
+        codec = await get_video_codec(original_url)
+        logger.info(f"Detected codec: {codec}")
 
-                    # Parse the m3u8 file
-                    playlist = m3u8.loads(response.text)
+        if "h264" in codec:
+            logger.info("Streaming original H264 stream without transcoding")
 
-                    # Log some info about the manifest
-                    logger.info(f"Segments: {len(playlist.segments)}")
-                    logger.info(f"Target Duration: {playlist.target_duration}")
-                    logger.info(
-                        f"Time elapsed: {(datetime.datetime.now() - start_time).total_seconds():.1f}s"
-                    )
+            # Fetch the original stream using requests
+            def stream_original():
+                with requests.get(original_url, stream=True) as r:
+                    r.raise_for_status()
+                    for chunk in r.iter_content(chunk_size=1024):
+                        yield chunk
 
-                    yield playlist.dumps().encode()
-                    await asyncio.sleep(2)  # Wait 2 seconds before next update
+            return StreamingResponse(
+                stream_original(), media_type="application/vnd.apple.mpegurl"
+            )
 
-            except Exception as e:
-                logger.error(f"Failed to fetch manifest: {str(e)}")
-                await asyncio.sleep(1)  # Wait before retry
-                continue
+        elif "hevc" in codec:
+            # Transcode HEVC to H.264
+            process = transcode_to_h264(original_url)
 
-        logger.info("30 second test complete, stopping stream")
+            # Stream FFmpeg output
+            async def stream_ffmpeg_output():
+                while True:
+                    chunk = process.stdout.read(1024)
+                    if not chunk:
+                        break
+                    yield chunk
+                process.stdout.close()
+                process.wait()  # Wait for FFmpeg to finish
+                if process.returncode != 0:
+                    logger.error(f"FFmpeg error: {process.stderr.read().decode()}")
+                    raise RuntimeError("FFmpeg failed during transcoding.")
 
-    return StreamingResponse(
-        content=stream_for_30_seconds(),
-        media_type="application/vnd.apple.mpegurl",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-        },
+            return StreamingResponse(
+                stream_ffmpeg_output(), media_type="application/vnd.apple.mpegurl"
+            )
+
+        else:
+            raise HTTPException(status_code=415, detail=f"Unsupported codec: {codec}")
+
+    except Exception as e:
+        logger.error(f"Error streaming channel {channel_number}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="An error occurred during streaming."
+        )
+
+
+@app.get("/segments/{channel_number}/{segment_path:path}")
+async def get_segment(
+    channel_number: int, segment_path: str, db: Session = Depends(database.get_db)
+):
+    # Fetch the channel from the database
+    channel = (
+        db.query(models.Channel)
+        .filter(models.Channel.channel_number == channel_number)
+        .first()
+    )
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Construct the full segment URL
+    segment_url = f"{channel.url}/{segment_path}"
+    response = requests.get(segment_url, stream=True)
+    if response.status_code == 200:
+        return StreamingResponse(
+            response.iter_content(chunk_size=1024), media_type="video/MP2T"
+        )
+    raise HTTPException(
+        status_code=response.status_code, detail="Failed to fetch segment"
     )
 
 
-@app.get("/segment/{channel_number}")
-async def get_segment(channel_number: int, url: str):
-    """Proxy endpoint for HLS segments"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, follow_redirects=True)
-            response.raise_for_status()
+# used by hls.js
+@app.get("/hls/{segment_path:path}")
+async def get_segment(segment_path: str):
+    # Proxy the segment requests to the external HLS server
+    segment_url = f"https://medcoreplatplus.xyz:443/hls/{segment_path}"
+    logger.info(f"Fetching HLS segment from {segment_url}")
+    response = requests.get(segment_url, stream=True)
 
-            return StreamingResponse(
-                content=response.aiter_bytes(),
-                media_type="video/MP2T",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "GET, OPTIONS",
-                    "Access-Control-Allow-Headers": "*",
-                    "Cache-Control": "public, max-age=86400",
-                },
-            )
-    except Exception as e:
-        logger.error(f"Segment fetch error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    if response.status_code == 200:
+        return StreamingResponse(
+            response.iter_content(chunk_size=1024), media_type="video/MP2T"
+        )
+    raise HTTPException(
+        status_code=response.status_code, detail="Failed to fetch segment"
+    )

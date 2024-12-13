@@ -15,6 +15,7 @@ interface VideoPlayerProps {
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const hlsRef = React.useRef<Hls | null>(null);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const handleStopStream = () => {
     if (hlsRef.current) {
@@ -25,6 +26,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       videoRef.current.pause();
       videoRef.current.src = '';
     }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
   };
 
   React.useEffect(() => {
@@ -32,6 +37,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
 
     const video = videoRef.current;
     const proxyUrl = `${API_URL}/stream/${channel.channel_number}`;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     if (Hls.isSupported()) {
       if (hlsRef.current) {
@@ -42,24 +49,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         maxBufferSize: 60 * 1000 * 1000,
-        manifestLoadingMaxRetry: 20,
+        manifestLoadingMaxRetry: 10,
         manifestLoadingRetryDelay: 1000,
-        manifestLoadingMaxRetryTimeout: 30000,
-        levelLoadingTimeOut: 30000,
-        fragLoadingTimeOut: 30000,
         enableWorker: true,
       });
-      
+
       hlsRef.current = hls;
-      
+
       hls.loadSource(proxyUrl);
       hls.attachMedia(video);
-      
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(e => console.warn('Autoplay prevented:', e));
+        video.play().catch((e) => console.warn('Autoplay prevented:', e));
       });
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(Hls.Events.ERROR, (_, data) => {
         console.warn('HLS error:', data);
         if (data.fatal) {
           switch (data.type) {
@@ -83,56 +87,62 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         hls.destroy();
         video.pause();
         video.src = '';
+        abortController.abort();
         hlsRef.current = null;
+        abortControllerRef.current = null;
       };
-    }
-    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // For Safari
       video.src = proxyUrl;
-      video.play()
-        .catch(e => console.warn('Autoplay prevented:', e));
+      video.play().catch((e) => console.warn('Autoplay prevented:', e));
 
       return () => {
         video.pause();
         video.src = '';
+        abortController.abort();
+        abortControllerRef.current = null;
       };
     }
   }, [channel.channel_number]);
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ 
-        width: '100%', 
-        height: '100%',
-        maxHeight: 'calc(100vh - 160px)', // Restore original height
-        bgcolor: 'black',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
+      <Box
+        sx={{
+          width: '100%',
+          height: '100%',
+          maxHeight: 'calc(100vh - 160px)',
+          bgcolor: 'black',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <video
           ref={videoRef}
           controls
-          style={{ 
+          style={{
             width: '100%',
             height: '100%',
             maxHeight: '100%',
-            objectFit: 'contain'
+            objectFit: 'contain',
           }}
           playsInline
           autoPlay
         />
       </Box>
-      
+
       {/* Channel Info Bar */}
-      <Box sx={{ 
-        p: 1, 
-        display: 'flex', 
-        alignItems: 'center',
-        gap: 2,
-        borderTop: 1,
-        borderColor: 'divider'
-      }}>
+      <Box
+        sx={{
+          p: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
         {/* Left side with channel info */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1 }}>
           <Avatar
@@ -149,14 +159,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         </Box>
 
         {/* Right side with stop button */}
-        <IconButton 
-          onClick={handleStopStream}
-          size="small"
-          title="Stop Stream"
-        >
+        <IconButton onClick={handleStopStream} size="small" title="Stop Stream">
           <StopIcon />
         </IconButton>
       </Box>
     </Paper>
   );
-}; 
+};
