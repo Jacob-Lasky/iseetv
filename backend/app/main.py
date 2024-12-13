@@ -20,6 +20,7 @@ from urllib.parse import urljoin
 import requests
 import subprocess
 from .video_helpers import get_video_codec, transcode_to_h264
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +52,29 @@ class ChannelBase(BaseModel):
     logo: Optional[str] = None
     is_favorite: bool = False
     last_watched: Optional[datetime.datetime] = None
+
+
+# In-memory cache for channel codecs
+codec_cache = {}
+
+
+async def get_codec(channel_number: int, original_url: str):
+    # Check cache
+    if channel_number in codec_cache:
+        return codec_cache[channel_number]
+    else:
+        # clear the cache
+        clear_cache()
+
+    # Fetch and cache codec
+    codec = await get_video_codec(original_url)
+    codec_cache[channel_number] = codec
+    return codec
+
+
+def clear_cache():
+    global codec_cache
+    codec_cache = {}
 
 
 # Add a test log at startup
@@ -204,7 +228,7 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
 
     try:
         # Check if transcoding is needed
-        codec = await get_video_codec(original_url)
+        codec = await get_codec(channel_number, original_url)
         logger.info(f"Detected codec: {codec}")
 
         if "h264" in codec:
@@ -212,10 +236,12 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
 
             # Fetch the original stream using requests
             def stream_original():
-                with requests.get(original_url, stream=True) as r:
-                    r.raise_for_status()
-                    for chunk in r.iter_content(chunk_size=1024):
+                start_time = time.time()
+                with requests.get(original_url, stream=True) as response:
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
                         yield chunk
+                logger.info(f"Streaming time: {time.time() - start_time}")
 
             return StreamingResponse(
                 stream_original(), media_type="application/vnd.apple.mpegurl"

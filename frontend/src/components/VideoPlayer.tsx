@@ -46,11 +46,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       }
 
       const hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferLength: 60,  // the maximum number of seconds to buffer
+        maxMaxBufferLength: 120,  // allow up to 120 seconds
+        // liveSyncDurationCount: 10,  // buffer at least X segments
+        // liveMaxLatencyDurationCount: 20,  // allow up to X segments of latency, must be greater than liveSyncDurationCount
+        // maxBufferSize: 60 * 1000 * 1000,
         manifestLoadingMaxRetry: 10,
-        manifestLoadingRetryDelay: 1000,
+        manifestLoadingRetryDelay: 500,  // retry every X milliseconds
+        levelLoadingMaxRetry: 5,  // Retry level loading X times
         enableWorker: true,
       });
 

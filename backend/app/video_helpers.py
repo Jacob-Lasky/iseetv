@@ -2,6 +2,8 @@ import subprocess
 from fastapi import HTTPException
 import logging
 import sys
+from fastapi import Depends
+from functools import lru_cache
 
 logging.basicConfig(
     level=logging.INFO,
@@ -10,6 +12,21 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+# In-memory cache for channel codecs
+codec_cache = {}
+
+
+async def get_codec(channel_number: int, original_url: str):
+    # Check cache
+    if channel_number in codec_cache:
+        return codec_cache[channel_number]
+
+    # Fetch and cache codec
+    codec = await get_video_codec(original_url)
+    codec_cache[channel_number] = codec
+    return codec
 
 
 async def get_video_codec(url: str) -> str:
