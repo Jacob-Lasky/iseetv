@@ -1,24 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app import models, database
-from typing import List, Optional
+from typing import Optional
 from pydantic import BaseModel
 import logging
-from fastapi.logger import logger as fastapi_logger
 import sys
 import datetime
 from .services.m3u_service import M3UService
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
-import asyncio
 from sqlalchemy import func
 from fastapi.responses import StreamingResponse
-import httpx
-import m3u8
-from urllib.parse import urljoin
 import requests
-import subprocess
 from .video_helpers import get_video_codec, transcode_to_h264
 import time
 
@@ -130,7 +122,7 @@ async def get_channels(
         if search:
             query = query.filter(models.Channel.name.ilike(f"%{search}%"))
         if favorites_only:
-            query = query.filter(models.Channel.is_favorite == True)
+            query = query.filter(models.Channel.is_favorite)
 
         # Always order by channel number
         query = query.order_by(models.Channel.channel_number)
@@ -278,34 +270,9 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
         )
 
 
-@app.get("/segments/{channel_number}/{segment_path:path}")
-async def get_segment(
-    channel_number: int, segment_path: str, db: Session = Depends(database.get_db)
-):
-    # Fetch the channel from the database
-    channel = (
-        db.query(models.Channel)
-        .filter(models.Channel.channel_number == channel_number)
-        .first()
-    )
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
-
-    # Construct the full segment URL
-    segment_url = f"{channel.url}/{segment_path}"
-    response = requests.get(segment_url, stream=True)
-    if response.status_code == 200:
-        return StreamingResponse(
-            response.iter_content(chunk_size=1024), media_type="video/MP2T"
-        )
-    raise HTTPException(
-        status_code=response.status_code, detail="Failed to fetch segment"
-    )
-
-
 # used by hls.js
 @app.get("/hls/{segment_path:path}")
-async def get_segment(segment_path: str):
+async def get_hls_segment(segment_path: str):
     # Proxy the segment requests to the external HLS server
     segment_url = f"https://medcoreplatplus.xyz:443/hls/{segment_path}"
     logger.info(f"Fetching HLS segment from {segment_url}")

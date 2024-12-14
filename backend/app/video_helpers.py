@@ -2,8 +2,6 @@ import subprocess
 from fastapi import HTTPException
 import logging
 import sys
-from fastapi import Depends
-from functools import lru_cache
 
 logging.basicConfig(
     level=logging.INFO,
