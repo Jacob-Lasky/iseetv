@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_video_codec(url: str) -> str:
-    logger.info(f"Fetching video codec for {url}")
+    logger.info(f"Determining video codec for {url}")
     try:
         result = subprocess.run(
             [

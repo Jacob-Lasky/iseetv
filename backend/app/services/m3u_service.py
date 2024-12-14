@@ -1,6 +1,6 @@
 import aiohttp
 import logging
-from typing import List, Optional
+from typing import List
 from ..models import Channel
 import re
 import hashlib

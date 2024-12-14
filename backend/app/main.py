@@ -60,6 +60,7 @@ async def get_codec(channel_number: int, original_url: str):
 
     # Fetch and cache codec
     codec = await get_video_codec(original_url)
+    logger.info(f"Cached codec for channel {channel_number}: {codec}")
     codec_cache[channel_number] = codec
     return codec
 
@@ -67,6 +68,7 @@ async def get_codec(channel_number: int, original_url: str):
 def clear_cache():
     global codec_cache
     codec_cache = {}
+    logger.info("Cleared codec cache")
 
 
 # Add a test log at startup
@@ -216,15 +218,15 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
 
     # Construct the m3u8 URL
     original_url = f"{channel.url}.m3u8"
-    logger.info(f"Fetching HLS manifest from {original_url}")
+    logger.debug(f"Fetching HLS manifest from {original_url}")
 
     try:
         # Check if transcoding is needed
         codec = await get_codec(channel_number, original_url)
-        logger.info(f"Detected codec: {codec}")
+        logger.debug(f"Detected codec: {codec}")
 
         if "h264" in codec:
-            logger.info("Streaming original H264 stream without transcoding")
+            logger.debug("Streaming original H264 stream without transcoding")
 
             # Fetch the original stream using requests
             def stream_original():
@@ -233,7 +235,7 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
                     response.raise_for_status()
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         yield chunk
-                logger.info(f"Streaming time: {time.time() - start_time}")
+                logger.debug(f"Streaming time: {time.time() - start_time}")
 
             return StreamingResponse(
                 stream_original(), media_type="application/vnd.apple.mpegurl"
@@ -275,7 +277,7 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
 async def get_hls_segment(segment_path: str):
     # Proxy the segment requests to the external HLS server
     segment_url = f"https://medcoreplatplus.xyz:443/hls/{segment_path}"
-    logger.info(f"Fetching HLS segment from {segment_url}")
+    logger.debug(f"Fetching HLS segment from {segment_url}")
     response = requests.get(segment_url, stream=True)
 
     if response.status_code == 200:
