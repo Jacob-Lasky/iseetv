@@ -1,7 +1,28 @@
 This is the IseeTV project.
 
-## Running the project
+## Roadmap:
+[] Integrate EPG
+[] Launch service as a single docker container
+
+## UI:
+![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
+- Three channel tabs: All, Favorites and Recent
+- Collapsable channel list
+- Search box
+- Settings gear to bring up the settings modal
+- Toggleable channel numbers
+-   Channel search appears when channel numbers are toggled
+
+## Settings Modal:
+![image](https://github.com/user-attachments/assets/56c695d2-434d-4109-9be3-8f4717bb367f)
+- Provide ISeeTV with an M3U link and (optionally) with an EPG
+-   Includes a manual refresh button
+- Change the update interval
+- Set the M3U to update on app-startup
+- Change the theme to light, dark or system (default)
+
+## Running the project manually
 
 1. Run `docker compose up` to start the backend container.
-2. Open `http://localhost:1314` in your browser.
+2. Open `http://localhost:1313` in your browser.
 
