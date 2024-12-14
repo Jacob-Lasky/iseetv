@@ -1,4 +1,7 @@
-This is the IseeTV project.
+This is the IseeTV project. It was created due to the lack of dockerized IPTV clients. The spirit of the project is "ease" - meaning:
+- Easy to navigate
+- Easy to deploy
+- Easy to contribute
 
 ## Roadmap:
 - [] Integrate EPG
@@ -23,6 +26,12 @@ This is the IseeTV project.
 
 ## Running the project manually
 
-1. Run `docker compose up` to start the backend container.
+1. Run `docker compose up` to start the containers.
 2. Open `http://localhost:1313` in your browser.
 
+## FAQ | Development | Feature Requests:
+- If you're thinking about contributing to this repo in anyway, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used React before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
+- General Development Guidelines
+-   Ask tons of questions
+-   Keep code testable and tested
+-   Update the README
