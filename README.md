@@ -1,8 +1,8 @@
 This is the IseeTV project.
 
 ## Roadmap:
-[] Integrate EPG
-[] Launch service as a single docker container
+- [] Integrate EPG
+- [] Launch service as a single docker container
 
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
