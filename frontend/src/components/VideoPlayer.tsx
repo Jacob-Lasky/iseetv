@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Paper, Avatar, Typography, IconButton } from '@mui/material';
 import Hls from 'hls.js';
 import { Channel } from '../models/Channel';
@@ -16,6 +16,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const hlsRef = React.useRef<Hls | null>(null);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
 
   const handleStopStream = () => {
     if (hlsRef.current) {
@@ -30,6 +32,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    setErrorMessage("Stream manually stopped by user.");
+    setIsPlaying(false);
   };
 
   React.useEffect(() => {
@@ -93,6 +97,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         abortController.abort();
         hlsRef.current = null;
         abortControllerRef.current = null;
+        setErrorMessage(null);
+        setIsPlaying(true);
       };
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // For Safari
@@ -104,6 +110,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         video.src = '';
         abortController.abort();
         abortControllerRef.current = null;
+        setErrorMessage(null);
+        setIsPlaying(true);
       };
     }
   }, [channel.channel_number]);
@@ -121,18 +129,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
           justifyContent: 'center',
         }}
       >
-        <video
-          ref={videoRef}
-          controls
-          style={{
-            width: '100%',
-            height: '100%',
-            maxHeight: '100%',
-            objectFit: 'contain',
-          }}
-          playsInline
-          autoPlay
-        />
+        {errorMessage && (
+          <Typography variant="body1" color="error" sx={{ textAlign: 'center' }}>
+            {errorMessage}
+          </Typography>
+        )}
+        {isPlaying && (
+          <video
+            ref={videoRef}
+            controls
+            style={{
+              width: '100%',
+              height: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+            }}
+            playsInline
+            autoPlay
+          />
+        )}
       </Box>
 
       {/* Channel Info Bar */}
