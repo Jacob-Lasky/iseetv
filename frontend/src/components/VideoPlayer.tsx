@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Box, Paper, Avatar, Typography, IconButton } from '@mui/material';
+import { Box, Paper, Avatar, Typography, } from '@mui/material';
 import Hls from 'hls.js';
 import { Channel } from '../models/Channel';
 import { API_URL } from '../config/api';
-import StopIcon from '@mui/icons-material/Stop';
 
 export {};
 
@@ -18,23 +17,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-
-  const handleStopStream = () => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.src = '';
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setErrorMessage("Stream manually stopped by user.");
-    setIsPlaying(false);
-  };
 
   React.useEffect(() => {
     if (!videoRef.current) return;
@@ -101,7 +83,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
         setIsPlaying(true);
       };
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // For Safari
       video.src = proxyUrl;
       video.play().catch((e) => console.warn('Autoplay prevented:', e));
 
@@ -175,11 +156,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
             {channel.name}
           </Typography>
         </Box>
-
-        {/* Right side with stop button */}
-        <IconButton onClick={handleStopStream} size="small" title="Stop Stream">
-          <StopIcon />
-        </IconButton>
       </Box>
     </Paper>
   );
