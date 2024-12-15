@@ -2,6 +2,7 @@ import subprocess
 from fastapi import HTTPException
 import logging
 import sys
+import subprocess
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,26 +51,112 @@ def transcode_to_h264(url: str):
         process = subprocess.Popen(
             [
                 "ffmpeg",
-                # "-headers",
-                # "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
                 "-i",
                 url,
                 "-c:v",
                 "libx264",
+                "-preset",
+                "faster",
                 "-c:a",
                 "aac",
+                "-b:a",
+                "128k",  # Transcode audio to AAC
                 "-f",
                 "hls",
-                "-hls_flags",
-                "delete_segments",
                 "-hls_time",
                 "4",
+                "-hls_list_size",
+                "0",
                 "pipe:1",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            # bufsize=10**6,
         )
         return process
     except Exception as e:
         logger.error(f"FFmpeg failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to transcode video.")
+
+
+def transcode_with_gpu(url: str):
+    process = subprocess.Popen(
+        [
+            "ffmpeg",
+            "-hwaccel",
+            "cuda",
+            "-i",
+            url,
+            "-c:v",
+            "h264_nvenc",
+            "-preset",
+            "fast",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",  # Transcode audio to AAC
+            "-f",
+            "hls",
+            "-hls_time",
+            "4",
+            "-hls_list_size",
+            "0",
+            "pipe:1",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        # bufsize=10**6,
+    )
+    return process
+
+
+import subprocess
+import os
+import tempfile
+
+
+def transcode_audio_only(url: str, temp_dir: str):
+    output_m3u8 = os.path.join(temp_dir, "output.m3u8")
+    segment_pattern = os.path.join(temp_dir, "segment%03d.ts")
+
+    process = subprocess.Popen(
+        [
+            "ffmpeg",
+            "-i",
+            url,
+            "-c:v",
+            "copy",  # Copy video stream
+            "-c:a",
+            "aac",  # Transcode audio to AAC
+            "-ar",
+            "44100",  # Ensure 44.1kHz audio
+            "-b:a",
+            "128k",  # Audio bitrate
+            "-ac",
+            "2",  # Stereo audio
+            "-f",
+            "hls",  # Output HLS format
+            "-hls_time",
+            "4",  # Segment length
+            "-hls_list_size",
+            "0",  # Keep all segments
+            "-hls_segment_filename",
+            segment_pattern,
+            "-hls_base_url",
+            f"/segments/",  # Correct base URL
+            output_m3u8,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    return process, output_m3u8
+
+
+def transcode_video(url: str, gpu_available: bool):
+    if gpu_available:
+        logger.debug("GPU detected. Using GPU for transcoding.")
+        return transcode_with_gpu(url)
+    else:
+        logger.debug("No GPU detected. Using CPU for transcoding.")
+        return transcode_to_h264(url)

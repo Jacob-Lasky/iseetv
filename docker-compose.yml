@@ -32,6 +32,16 @@ services:
 
   backend:
     container_name: iseetv-backend
+    image: your_image_name
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=GPU-25f5d0be-15d5-fcff-be10-c1afca13d69a
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     build: 
       context: ./backend
       dockerfile: Dockerfile
