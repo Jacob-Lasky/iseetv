@@ -8,8 +8,8 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
 - Easy to contribute
 
 ## Roadmap:
-- [] Integrate EPG
-- [] Launch service as a single docker container
+- [ ] Integrate EPG
+- [ ] Launch service as a single docker container
 
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
@@ -34,8 +34,8 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
 2. Open `http://localhost:1313` in your browser.
 
 ## FAQ | Development | Feature Requests:
-- If you're thinking about contributing to this repo in anyway, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used React before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
+If you're thinking about contributing to this repo in any way, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used React before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
 - General Development Guidelines
--   Ask tons of questions
--   Keep code testable and tested
--   Update the README
+  - Ask tons of questions
+  - Keep code testable and tested
+  - Update the README
