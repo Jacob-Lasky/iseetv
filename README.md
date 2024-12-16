@@ -1,3 +1,6 @@
+<p align="center"><img src=https://github.com/user-attachments/assets/f42dbf92-18e4-48ed-882d-32afb8d36086/></p>
+<hr></hr>
+
 This is the IseeTV project. It was created due to the lack of dockerized IPTV clients. The spirit of the project is "ease" - meaning:
 - Easy to navigate
 - Easy to deploy
