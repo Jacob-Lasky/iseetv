@@ -85,5 +85,5 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
 If you're thinking about contributing to this repo in any way, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used React before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
 - General Development Guidelines
   - Ask tons of questions
-  - Keep code testable and tested
+  - Keep code tested
   - Update the README
