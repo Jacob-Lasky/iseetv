@@ -9,9 +9,13 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
 
 ## Roadmap:
 ![GitHub milestone details](https://img.shields.io/github/milestones/issues-open/Jacob-Lasky/ISeeTV/1)
+![GitHub milestone details](https://img.shields.io/github/milestones/issues-open/Jacob-Lasky/ISeeTV/2)
+![GitHub milestone details](https://img.shields.io/github/milestones/issues-open/Jacob-Lasky/ISeeTV/3)
+![GitHub milestone details](https://img.shields.io/github/milestones/issues-open/Jacob-Lasky/ISeeTV/4)
+![GitHub milestone details](https://img.shields.io/github/milestones/issues-open/Jacob-Lasky/ISeeTV/5)
 
-- [ ] Integrate EPG
-- [ ] Launch service as a single docker container
+
+
 
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
