@@ -8,8 +8,7 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
 - Easy to contribute
 
 ## Planned Features:
-<img alt="GitHub milestone details" src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?link=https%3A%2F%2Fgithub.com%2FJacob-Lasky%2FISeeTV%2Fmilestone%2F1&link=https%3A%2F%2Fgithub.com%2FJacob-Lasky%2FISeeTV%2Fmilestone%2F1">
-
+<![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1)
 
 ![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2)
 
