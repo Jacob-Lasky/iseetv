@@ -59,17 +59,6 @@ This is the IseeTV project. It was created due to the lack of dockerized IPTV cl
   </tbody>
 </table>
 
-![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1)
-
-![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2)
-
-![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3)
-
-![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5)
-
-
-
-
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
 - Three channel tabs: All, Favorites and Recent
