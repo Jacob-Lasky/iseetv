@@ -2,7 +2,7 @@
 
 <hr></hr>
 
-This is the IseeTV project. It was created due to the lack of dockerized IPTV clients. The spirit of the project is "ease" - meaning:
+This is the ISeeTV project. It was created due to the lack of dockerized IPTV clients. The spirit of the project is "ease" - meaning:
 - Easy to navigate
 - Easy to deploy
 - Easy to contribute
