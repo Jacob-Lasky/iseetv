@@ -8,6 +8,7 @@ This is the ISeeTV project. It was created due to the lack of dockerized IPTV cl
 - Easy to contribute
 
 ## Planned Features:
+### v1.0.0
 <table style="width: 100%; border-collapse: collapse; text-align: center;">
   <thead>
     <tr>
@@ -19,11 +20,43 @@ This is the ISeeTV project. It was created due to the lack of dockerized IPTV cl
     <tr>
       <td style="padding: 10px; white-space: nowrap;">
         <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/1" target="_blank">
-          v1.0.0 Release
+          v1.0.0 Misc. Tasks
         </a>
       </td>
       <td style="padding: 10px; white-space: nowrap;">
         <img src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?label=" alt="Progress">
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 10px; white-space: nowrap;">
+        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/2" target="_blank">
+          EPG Parsing
+        </a>
+      </td>
+      <td style="padding: 10px; white-space: nowrap;">
+        <img src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/6?label=" alt="Progress">
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+### v2.0.0
+<table style="width: 100%; border-collapse: collapse; text-align: center;">
+  <thead>
+    <tr>
+      <th style="padding: 10px; white-space: nowrap;">Milestone</th>
+      <th style="padding: 10px; white-space: nowrap;">Complete</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 10px; white-space: nowrap;">
+        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/1" target="_blank">
+          v2.0.0 Misc. Tasks
+        </a>
+      </td>
+      <td style="padding: 10px; white-space: nowrap;">
+        <img src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/6?label=" alt="Progress">
       </td>
     </tr>
     <tr>
