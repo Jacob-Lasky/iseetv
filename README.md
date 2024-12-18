@@ -29,7 +29,7 @@ This is the ISeeTV project. It was created due to the lack of dockerized IPTV cl
     </tr>
     <tr>
       <td style="padding: 10px; white-space: nowrap;">
-        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/2" target="_blank">
+        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/6" target="_blank">
           EPG Parsing
         </a>
       </td>
@@ -51,12 +51,12 @@ This is the ISeeTV project. It was created due to the lack of dockerized IPTV cl
   <tbody>
     <tr>
       <td style="padding: 10px; white-space: nowrap;">
-        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/1" target="_blank">
+        <a href="https://github.com/Jacob-Lasky/ISeeTV/milestone/4" target="_blank">
           v2.0.0 Misc. Tasks
         </a>
       </td>
       <td style="padding: 10px; white-space: nowrap;">
-        <img src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/6?label=" alt="Progress">
+        <img src="https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=" alt="Progress">
       </td>
     </tr>
     <tr>
