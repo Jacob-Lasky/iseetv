@@ -329,6 +329,14 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
             detail="M3U8 file not found. Channel may have been cleaned up.",
         )
 
+    # Add this before returning the FileResponse
+    logger.info(f"Serving m3u8 for channel {channel_number}")
+
+    # Verify m3u8 content before serving
+    with open(output_m3u8, "r") as f:
+        content = f.read()
+        logger.debug(f"M3U8 content: {content}")
+
     return FileResponse(output_m3u8, media_type="application/vnd.apple.mpegurl")
 
 
@@ -371,44 +379,6 @@ def cleanup_channel_resources(channel_number: int):
         return {"message": f"Cleaned up resources for channel {channel_number}"}
 
     return {"message": f"No resources found for channel {channel_number}"}
-
-
-def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
-    output_m3u8 = os.path.join(channel_dir, "output.m3u8")
-    segment_pattern = os.path.join(channel_dir, "segment%03d.ts")
-
-    process = subprocess.Popen(
-        [
-            "ffmpeg",
-            "-i",
-            url,
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-ar",
-            "44100",
-            "-b:a",
-            "128k",
-            "-ac",
-            "2",
-            "-f",
-            "hls",
-            "-hls_time",
-            "4",
-            "-hls_list_size",
-            "0",
-            "-hls_segment_filename",
-            segment_pattern,
-            "-hls_base_url",
-            f"/segments/{channel_number}/",  # Use the channel number in the base URL
-            output_m3u8,
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    return process, output_m3u8
 
 
 # used by hls.js

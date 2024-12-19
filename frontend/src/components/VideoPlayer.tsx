@@ -68,9 +68,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
             // fragLoadingMaxRetry: 6,
             // startFragPrefetch: true,
             // lowLatencyMode: false,
-            // debug: true,
+            debug: true,
             // autoStartLoad: true,
-            // liveDurationInfinity: true,
+            liveDurationInfinity: true,
             xhrSetup: (xhr, url) => {
               if (url.includes('/segments/')) {
                 const newUrl = url.replace('/segments/', `${API_URL}/segments/`);

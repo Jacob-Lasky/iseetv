@@ -144,7 +144,7 @@ def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
             "-hls_segment_filename",
             segment_pattern,
             "-hls_base_url",
-            f"/api/segments/{channel_number}/",
+            f"/segments/{channel_number}/",
             output_m3u8,
         ],
         stdout=subprocess.PIPE,
