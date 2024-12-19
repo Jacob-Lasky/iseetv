@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.86.183:1314';
+const API_BASE_URL = '/api';
 
 export const api = {
   async get(endpoint) {

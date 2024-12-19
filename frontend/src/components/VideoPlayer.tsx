@@ -56,15 +56,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
 
           const proxyUrl = `${API_URL}/stream/${channel.channel_number}`;
           const hls = new Hls({
-            maxBufferLength: 60,  // the maximum number of seconds to buffer
-            maxMaxBufferLength: 120,  // allow up to 120 seconds
-            // liveSyncDurationCount: 10,  // buffer at least X segments
-            // liveMaxLatencyDurationCount: 20,  // allow up to X segments of latency, must be greater than liveSyncDurationCount
-            // maxBufferSize: 60 * 1000 * 1000,
+            maxBufferLength: 60,
+            maxMaxBufferLength: 120,
             manifestLoadingMaxRetry: 10,
-            manifestLoadingRetryDelay: 500,  // retry every X milliseconds
-            levelLoadingMaxRetry: 5,  // Retry level loading X times
+            manifestLoadingRetryDelay: 500,  // 1000
+            levelLoadingMaxRetry: 5,
             enableWorker: true,
+            // liveSyncDurationCount: 3,
+            // liveMaxLatencyDurationCount: 10,
+            // fragLoadingRetryDelay: 1000,
+            // fragLoadingMaxRetry: 6,
+            // startFragPrefetch: true,
+            // lowLatencyMode: false,
+            // debug: true,
+            // autoStartLoad: true,
+            // liveDurationInfinity: true,
+            xhrSetup: (xhr, url) => {
+              if (url.includes('/segments/')) {
+                const newUrl = url.replace('/segments/', `${API_URL}/segments/`);
+                xhr.open('GET', newUrl, true);
+              }
+            }
           });
 
           hlsRef.current = hls;
@@ -79,7 +91,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
               });
           });
 
-          hls.on(Hls.Events.ERROR, (_, data) => {
+          hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+            console.log('Level loaded:', data);
+            if (data.details.live && !data.details.fragments.length) {
+              console.warn('No fragments in playlist, reloading...');
+              hls.startLoad();
+            }
+          });
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
             console.warn('HLS error:', data);
             if (data.fatal) {
               setIsPlaying(false);
@@ -97,6 +117,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
                   hls.destroy();
                   break;
               }
+            } else if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+              console.warn('Buffer stalled, forcing reload...');
+              hls.stopLoad();
+              hls.startLoad();
+              video?.play().catch(console.error);
+            }
+          });
+
+          hls.on(Hls.Events.BUFFER_APPENDED, () => {
+            if (!isPlaying) {
+              setIsPlaying(true);
+              video?.play().catch(console.error);
             }
           });
         }

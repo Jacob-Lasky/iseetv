@@ -17,13 +17,17 @@ from .video_helpers import get_video_codec, transcode_video, transcode_audio_onl
 import time
 import subprocess
 import os
-import tempfile
 import shutil
 import time
 import signal
 from starlette.staticfiles import StaticFiles
 from starlette.routing import Mount
 
+# import uvicorn
+# from custom_logger import get_logger
+
+# # Set up logging before creating the FastAPI app
+# logger = get_logger(__name__, prefix="[backend]")
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s:\t%(message)s",
@@ -237,9 +241,6 @@ async def get_channel_groups(db: Session = Depends(database.get_db)):
 
 # Temporary directories for streaming
 stream_resources: Dict[int, Tuple[str, subprocess.Popen]] = {}
-
-# Keep track of mounted directories
-mounted_directories = {}
 
 # Mount a single static files directory for all segments
 SEGMENTS_DIR = "/tmp/iseetv_segments"
